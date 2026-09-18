@@ -86,3 +86,18 @@ def test_update_existing_profile(temp_storage: ProfileStorage):
     assert updated.port == 5433
     assert updated.username == "reader_v2"
     assert updated.password == "newpassword"
+
+
+def test_database_field_optional_defaults_to_postgres(temp_storage: ProfileStorage):
+    # Omitted database
+    p1 = temp_storage.save_profile(
+        ProfileCreate(name="no-db", username="postgres")
+    )
+    assert p1.database == "postgres"
+
+    # Empty string database
+    p2 = temp_storage.save_profile(
+        ProfileCreate(name="empty-db", database="", username="postgres")
+    )
+    assert p2.database == "postgres"
+

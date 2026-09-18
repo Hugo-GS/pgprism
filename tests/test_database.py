@@ -159,3 +159,34 @@ def test_explain_query(sample_profile: Profile):
         plan = db.explain_query("SELECT * FROM users")
         assert "Seq Scan on users" in plan
 
+
+def test_list_databases(sample_profile: Profile):
+    db = DatabaseManager(sample_profile)
+
+    mock_cursor = MagicMock()
+    mock_cursor.description = [MagicMock(name="datname")]
+    mock_cursor.description[0].name = "datname"
+    mock_cursor.fetchmany.return_value = [("postgres",), ("analytics",), ("ecommerce",)]
+
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
+
+    with patch.object(db, "_get_connection", return_value=mock_conn):
+        dbs = db.list_databases()
+        assert dbs == ["postgres", "analytics", "ecommerce"]
+
+
+def test_set_database(sample_profile: Profile):
+    db = DatabaseManager(sample_profile)
+    assert db.current_database == "test_db"
+
+    db.set_database("analytics_prod")
+    assert db.current_database == "analytics_prod"
+    assert "dbname=analytics_prod" in db.get_conninfo()
+
+    with pytest.raises(ValueError):
+        db.set_database("")
+
+

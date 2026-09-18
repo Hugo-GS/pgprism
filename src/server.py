@@ -16,13 +16,19 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
         description="Strictly read-only PostgreSQL MCP server with local SQLite profile configuration",
     )
 
+    active_state: Dict[str, Any] = {"current_db": None, "profile_id": None}
+
     def _get_active_db() -> DatabaseManager:
         profile = store.get_active_profile()
         if not profile:
             raise ValueError(
                 "No active database profile configured. Please add and activate a connection profile."
             )
-        return DatabaseManager(profile)
+        if active_state["profile_id"] != profile.id:
+            active_state["profile_id"] = profile.id
+            active_state["current_db"] = profile.database or "postgres"
+
+        return DatabaseManager(profile, database=active_state["current_db"])
 
     @server.tool()
     def get_active_profile() -> Dict[str, Any]:
@@ -31,17 +37,39 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
         if not profile:
             return {"status": "error", "message": "No active database profile configured."}
 
+        current_db = active_state["current_db"] or profile.database or "postgres"
         return {
             "status": "ok",
             "profile": {
                 "name": profile.name,
                 "host": profile.host,
                 "port": profile.port,
-                "database": profile.database,
+                "database": current_db,
+                "default_database": profile.database,
                 "username": profile.username,
                 "sslmode": profile.sslmode,
                 "is_active": profile.is_active,
             },
+        }
+
+    @server.tool()
+    def list_databases() -> List[str]:
+        """Lists all accessible non-template databases on the PostgreSQL server."""
+        db = _get_active_db()
+        return db.list_databases()
+
+    @server.tool()
+    def select_database(database_name: str) -> Dict[str, Any]:
+        """Switches the target database for subsequent queries and schema exploration."""
+        _get_active_db()  # Verifies active profile exists
+        cleaned = database_name.strip()
+        if not cleaned:
+            return {"status": "error", "message": "Database name cannot be empty."}
+        active_state["current_db"] = cleaned
+        return {
+            "status": "ok",
+            "message": f"Active target database set to '{cleaned}'.",
+            "database": cleaned,
         }
 
     @server.tool()
@@ -70,6 +98,8 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
             return {"status": "error", "message": f"Profile '{profile_name}' not found."}
 
         updated = store.set_active_profile(profile.id)
+        active_state["profile_id"] = None
+        active_state["current_db"] = None
         return {
             "status": "ok",
             "message": f"Active profile switched to '{updated.name}'.",  # type: ignore

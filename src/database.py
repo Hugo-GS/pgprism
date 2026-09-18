@@ -32,15 +32,23 @@ def _serialize_value(val: Any) -> Any:
 class DatabaseManager:
     """Manages read-only connections and queries to a PostgreSQL database."""
 
-    def __init__(self, profile: Profile) -> None:
+    def __init__(self, profile: Profile, database: Optional[str] = None) -> None:
         self.profile = profile
+        self.current_database = database or profile.database or "postgres"
 
-    def get_conninfo(self) -> str:
+    def set_database(self, database: str) -> None:
+        """Switches the active database for the connection."""
+        if not database or not database.strip():
+            raise ValueError("Database name cannot be empty.")
+        self.current_database = database.strip()
+
+    def get_conninfo(self, db_override: Optional[str] = None) -> str:
         """Constructs a PostgreSQL libpq connection string."""
+        target_db = db_override or self.current_database
         parts = [
             f"host={self.profile.host}",
             f"port={self.profile.port}",
-            f"dbname={self.profile.database}",
+            f"dbname={target_db}",
             f"user={self.profile.username}",
             f"sslmode={self.profile.sslmode}",
         ]
@@ -48,11 +56,11 @@ class DatabaseManager:
             parts.append(f"password={self.profile.password}")
         return " ".join(parts)
 
-    def _get_connection(self) -> psycopg.Connection:
+    def _get_connection(self, db_override: Optional[str] = None) -> psycopg.Connection:
         """Establishes a connection with default_transaction_read_only=on."""
         # Enforce read-only default at session level through options
         return psycopg.connect(
-            self.get_conninfo(),
+            self.get_conninfo(db_override=db_override),
             options="-c default_transaction_read_only=on",
             connect_timeout=10,
         )
@@ -106,6 +114,17 @@ class DatabaseManager:
                         "row_count": len(serialized_rows),
                         "truncated": truncated,
                     }
+
+    def list_databases(self) -> List[str]:
+        """Lists accessible non-template databases on the PostgreSQL server."""
+        sql_text = """
+            SELECT datname
+            FROM pg_database
+            WHERE datistemplate = false
+            ORDER BY datname;
+        """
+        res = self.execute_query(sql_text, max_rows=500)
+        return [r["datname"] for r in res["rows"]]
 
     def list_schemas(self) -> List[str]:
         """Lists user-accessible schemas in the database."""

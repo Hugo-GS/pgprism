@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
-from typing import List, Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -26,14 +26,24 @@ def get_default_db_path() -> Path:
         return local_dir / "profiles.db"
 
 
+from pydantic import BaseModel, Field, field_validator
+
+
 class ProfileCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     host: str = Field(default="localhost")
     port: int = Field(default=5432, ge=1, le=65535)
-    database: str = Field(..., min_length=1)
+    database: str = Field(default="postgres")
     username: str = Field(..., min_length=1)
     password: str = Field(default="")
     sslmode: str = Field(default="prefer")
+
+    @field_validator("database", mode="before")
+    @classmethod
+    def default_database_if_empty(cls, v: Any) -> str:
+        if not v or not str(v).strip():
+            return "postgres"
+        return str(v).strip()
 
 
 class Profile(ProfileCreate):

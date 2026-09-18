@@ -56,7 +56,9 @@ src/
 | Tool | Parameters | Description |
 | :--- | :--- | :--- |
 | `read_query` | `query: str, max_rows: int = 100` | Executes a strictly read-only query and returns formatted rows. |
-| `list_schemas` | _none_ | Lists user schemas in the database. |
+| `list_databases` | _none_ | Lists all accessible non-template databases in the PostgreSQL cluster. |
+| `select_database` | `database_name: str` | Switches the active target database dynamically. |
+| `list_schemas` | _none_ | Lists user schemas in the active database. |
 | `list_tables` | `schema: str = "public"` | Lists tables and views in the schema. |
 | `describe_table` | `table: str, schema: str = "public"` | Inspects column types, nullability, defaults, and primary keys. |
 | `explain_query` | `query: str, analyze: bool = False` | Returns the EXPLAIN query execution plan. |

@@ -76,3 +76,14 @@ def test_delete_profile_api(test_client: TestClient):
     # Not found when deleting again
     del_res2 = test_client.delete(f"/api/profiles/{p['id']}")
     assert del_res2.status_code == 404
+
+
+def test_create_profile_without_database_defaults_to_postgres(test_client: TestClient):
+    payload = {
+        "name": "cluster-default",
+        "username": "admin",
+    }
+    res = test_client.post("/api/profiles", json=payload)
+    assert res.status_code == 201
+    assert res.json()["database"] == "postgres"
+

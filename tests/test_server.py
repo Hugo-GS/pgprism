@@ -84,3 +84,32 @@ async def test_list_tables(storage_with_profile: ProfileStorage):
         result = await server.call_tool("list_tables", {"schema": "public"})
         assert result.is_error is False
         assert "users" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_list_databases(storage_with_profile: ProfileStorage):
+    server = create_server(storage=storage_with_profile)
+
+    with patch("src.server.DatabaseManager") as MockDB:
+        instance = MockDB.return_value
+        instance.list_databases.return_value = ["postgres", "analytics"]
+
+        result = await server.call_tool("list_databases", {})
+        assert result.is_error is False
+        full_text = " ".join(item.text for item in result.content)
+        assert "analytics" in full_text
+        assert "postgres" in full_text
+
+
+@pytest.mark.anyio
+async def test_select_database(storage_with_profile: ProfileStorage):
+    server = create_server(storage=storage_with_profile)
+
+    with patch("src.server.DatabaseManager"):
+        result = await server.call_tool("select_database", {"database_name": "analytics_db"})
+        assert result.is_error is False
+        assert "analytics_db" in result.content[0].text
+
+        profile_res = await server.call_tool("get_active_profile", {})
+        assert "analytics_db" in profile_res.content[0].text
+

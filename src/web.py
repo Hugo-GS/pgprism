@@ -292,8 +292,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     </div>
 
                     <div class="field">
-                        <label>Database</label>
-                        <input id="database" required placeholder="postgres" autocomplete="off">
+                        <label>Database (Optional)</label>
+                        <input id="database" placeholder="postgres (default)" autocomplete="off">
                     </div>
 
                     <div class="field">
@@ -346,7 +346,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 name: document.getElementById('name').value.trim(),
                 host: document.getElementById('host').value.trim(),
                 port: parseInt(document.getElementById('port').value, 10),
-                database: document.getElementById('database').value.trim(),
+                database: document.getElementById('database').value.trim() || 'postgres',
                 username: document.getElementById('username').value.trim(),
                 password: document.getElementById('password').value,
                 sslmode: document.getElementById('sslmode').value,
@@ -492,6 +492,23 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
                 detail=f"Profile with id {profile_id} not found.",
             )
         return {"success": True}
+
+    @app.get("/api/profiles/{profile_id}/databases", response_model=List[str])
+    def list_profile_databases(profile_id: int):
+        profile = store.get_profile(profile_id)
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Profile with id {profile_id} not found.",
+            )
+        db = DatabaseManager(profile)
+        try:
+            return db.list_databases()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to query server databases: {e}",
+            )
 
     @app.post("/api/profiles/test")
     def test_profile_connection(payload: ProfileCreate):
