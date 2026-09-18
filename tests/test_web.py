@@ -17,6 +17,18 @@ def test_index_page_loads(test_client: TestClient):
     response = test_client.get("/")
     assert response.status_code == 200
     assert "MCP PostgreSQL" in response.text
+    assert "/static/style.css" in response.text
+    assert "/static/app.js" in response.text
+
+
+def test_static_assets_serve(test_client: TestClient):
+    css_res = test_client.get("/static/style.css")
+    assert css_res.status_code == 200
+    assert "--bg:" in css_res.text
+
+    js_res = test_client.get("/static/app.js")
+    assert js_res.status_code == 200
+    assert "loadProfiles" in js_res.text
 
 
 def test_create_and_list_profiles_api(test_client: TestClient):

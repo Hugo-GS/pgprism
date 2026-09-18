@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP PostgreSQL - Configuration</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/app.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>MCP PostgreSQL</h1>
+            </div>
+            <span class="tag">Read-Only Engine</span>
+        </header>
+
+        <div id="alertBox"></div>
+
+        <div class="grid">
+            <!-- Left Form -->
+            <section>
+                <h2>New Profile</h2>
+                <form id="profileForm">
+                    <div class="field">
+                        <label>Profile Name</label>
+                        <input id="name" required placeholder="local-dev" autocomplete="off">
+                    </div>
+
+                    <div class="field field-row">
+                        <div>
+                            <label>Host</label>
+                            <input id="host" value="localhost" autocomplete="off">
+                        </div>
+                        <div>
+                            <label>Port</label>
+                            <input id="port" type="number" value="5432">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>Database (Optional)</label>
+                        <input id="database" placeholder="postgres (default)" autocomplete="off">
+                    </div>
+
+                    <div class="field">
+                        <label>Username</label>
+                        <input id="username" required placeholder="postgres" autocomplete="off">
+                    </div>
+
+                    <div class="field">
+                        <label>Password</label>
+                        <input id="password" type="password" placeholder="••••••••">
+                    </div>
+
+                    <div class="field">
+                        <label>SSL Mode</label>
+                        <select id="sslmode">
+                            <option value="prefer">prefer</option>
+                            <option value="require">require</option>
+                            <option value="disable">disable</option>
+                            <option value="allow">allow</option>
+                        </select>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="button" onclick="testConnection()" class="btn-secondary">Test</button>
+                        <button type="submit" class="btn-primary">Save Profile</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Right Profile List -->
+            <section>
+                <h2>Configured Profiles (SQLite)</h2>
+                <div id="profilesList">
+                    <div class="empty-state">Loading profiles...</div>
+                </div>
+            </section>
+        </div>
+    </div>
+</body>
+</html>
