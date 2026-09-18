@@ -18,12 +18,12 @@ MCP clients (Claude Desktop, Cursor, Antigravity, etc.) need to inspect database
 - Engram Mirror: Pending (Engram MCP unavailable in this session)
 
 ## Task Checklist
-- [ ] **TASK-1**: Environment setup, dependency configuration (`pyproject.toml`, `.venv`), and test framework.
-- [ ] **TASK-2**: Read-only AST security validator (`src/security.py`) and unit tests (`tests/test_security.py`).
-- [ ] **TASK-3**: Local SQLite profile repository (`src/storage.py`) and unit tests (`tests/test_storage.py`).
-- [ ] **TASK-4**: PostgreSQL client with read-only transaction/session enforcement (`src/database.py`).
-- [ ] **TASK-5**: FastMCP server integration (`src/server.py`) exposing read-only tools.
-- [ ] **TASK-6**: Local web configuration interface (`src/web.py`) and documentation (`README.md`).
+- [x] **TASK-1**: Environment setup, dependency configuration (`pyproject.toml`, `.venv`), and test framework. (Commit: a4be907)
+- [x] **TASK-2**: Read-only AST security validator (`src/security.py`) and unit tests (`tests/test_security.py`). (Commit: f69ee5f)
+- [x] **TASK-3**: Local SQLite profile repository (`src/storage.py`) and unit tests (`tests/test_storage.py`). (Commit: 1ffd4b5)
+- [x] **TASK-4**: PostgreSQL client with read-only transaction/session enforcement (`src/database.py`). (Commit: 56e25b6)
+- [x] **TASK-5**: FastMCP server integration (`src/server.py`) exposing read-only tools. (Commit: c0f12ee)
+- [x] **TASK-6**: Local web configuration interface (`src/web.py`) and documentation (`README.md`). (Commit: b601728)
 
 ## Applicable Checks
 - Automated unit tests via `pytest` for security AST validation and SQLite storage.
