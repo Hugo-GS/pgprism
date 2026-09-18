@@ -1,0 +1,33 @@
+[project]
+name = "mcp-postgresql"
+version = "0.1.0"
+description = "Strictly read-only PostgreSQL MCP server with local SQLite profile management"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.3.0",
+    "psycopg[binary]>=3.2.0",
+    "psycopg-pool>=3.2.0",
+    "sqlglot>=25.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+mcp-postgresql = "src.server:main"
+mcp-postgresql-web = "src.web:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
