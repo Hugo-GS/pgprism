@@ -97,3 +97,58 @@ def test_valid_explain_analyze_select():
     validated = validate_readonly_query(sql)
     assert "EXPLAIN" in validated.upper()
 
+
+def test_rejects_select_into():
+    with pytest.raises(SecurityError, match="INTO"):
+        validate_readonly_query("SELECT * INTO new_table FROM users")
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT * FROM users FOR UPDATE",
+        "SELECT * FROM users FOR NO KEY UPDATE",
+        "SELECT * FROM users FOR SHARE",
+        "SELECT * FROM users FOR KEY SHARE",
+    ],
+)
+def test_rejects_row_locking(sql: str):
+    with pytest.raises(SecurityError, match="LOCK"):
+        validate_readonly_query(sql)
+
+
+def test_rejects_copy():
+    with pytest.raises(SecurityError):
+        validate_readonly_query("COPY users TO '/tmp/data'")
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "EXPLAIN ANALYZE INSERT INTO users (name) SELECT 'evil'",
+        "EXPLAIN (ANALYZE) UPDATE users SET name = 'evil' WHERE id = 1",
+        "EXPLAIN ANALYZE DELETE FROM users",
+    ],
+)
+def test_rejects_explain_with_nested_mutation(sql: str):
+    with pytest.raises(SecurityError):
+        validate_readonly_query(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT set_config('session_replication_role', 'replica', false)",
+        "SELECT pg_catalog.set_config('default_transaction_read_only', 'off', false)",
+        "SELECT pg_read_file('/etc/passwd')",
+        "SELECT pg_read_binary_file('/etc/shadow')",
+        "SELECT pg_write_file('/tmp/owned', 'backdoor')",
+        "SELECT pg_sleep(10)",
+        "SELECT pg_advisory_lock(12345)",
+        "SELECT pg_switch_wal()",
+    ],
+)
+def test_rejects_expanded_dangerous_functions(sql: str):
+    with pytest.raises(SecurityError, match="Forbidden function"):
+        validate_readonly_query(sql)
+
