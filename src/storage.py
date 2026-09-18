@@ -7,8 +7,23 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-DEFAULT_DB_DIR = Path.home() / ".config" / "mcp-postgresql"
-DEFAULT_DB_PATH = DEFAULT_DB_DIR / "profiles.db"
+import os
+
+def get_default_db_path() -> Path:
+    """Returns the database path, respecting MCP_POSTGRES_DB_PATH or falling back to ~/.config or local .data."""
+    if "MCP_POSTGRES_DB_PATH" in os.environ:
+        path = Path(os.environ["MCP_POSTGRES_DB_PATH"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    config_dir = Path.home() / ".config" / "mcp-postgresql"
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return config_dir / "profiles.db"
+    except OSError:
+        local_dir = Path.cwd() / ".data"
+        local_dir.mkdir(parents=True, exist_ok=True)
+        return local_dir / "profiles.db"
 
 
 class ProfileCreate(BaseModel):
@@ -33,8 +48,7 @@ class ProfileStorage:
 
     def __init__(self, db_path: Optional[Path | str] = None) -> None:
         if db_path is None:
-            DEFAULT_DB_DIR.mkdir(parents=True, exist_ok=True)
-            self.db_path = DEFAULT_DB_PATH
+            self.db_path = get_default_db_path()
         else:
             self.db_path = Path(db_path)
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
