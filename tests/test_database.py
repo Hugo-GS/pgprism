@@ -62,8 +62,9 @@ def test_execute_query_formats_results(sample_profile: Profile):
     with patch.object(db, "_get_connection", return_value=mock_conn):
         result = db.execute_query("SELECT id, username FROM users", max_rows=10)
 
-        # Ensure transaction was opened with read_only=True
-        mock_conn.transaction.assert_called_once_with(read_only=True)
+        # Ensure the transaction uses the current psycopg API and is explicitly read-only.
+        mock_conn.transaction.assert_called_once_with()
+        mock_cursor.execute.assert_any_call("SET TRANSACTION READ ONLY")
         assert result["columns"] == ["id", "username"]
         assert result["row_count"] == 2
         assert result["rows"] == [

@@ -1,8 +1,9 @@
 """PostgreSQL database manager with strict read-only enforcement."""
 
+from contextlib import contextmanager
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple, TypeAlias, TypedDict, Union
+from typing import Dict, Iterator, List, Optional, Tuple, TypeAlias, TypedDict, Union
 import uuid
 import psycopg
 from psycopg import sql
@@ -96,11 +97,19 @@ class DatabaseManager:
             connect_timeout=10,
         )
 
+    @contextmanager
+    def _read_only_transaction(self, conn: psycopg.Connection) -> Iterator[None]:
+        """Runs a transaction with an explicit PostgreSQL read-only mode."""
+        with conn.transaction():
+            with conn.cursor() as cur:
+                cur.execute("SET TRANSACTION READ ONLY")
+            yield
+
     def test_connection(self) -> Tuple[bool, str]:
         """Tests the connection and returns (success, message_or_version)."""
         try:
             with self._get_connection() as conn:
-                with conn.transaction(read_only=True):
+                with self._read_only_transaction(conn):
                     with conn.cursor() as cur:
                         cur.execute("SELECT version();")
                         version = cur.fetchone()[0]  # type: ignore
@@ -120,7 +129,7 @@ class DatabaseManager:
 
         # 2. Database level read-only transaction (Defense layer 2)
         with self._get_connection() as conn:
-            with conn.transaction(read_only=True):
+            with self._read_only_transaction(conn):
                 with conn.cursor() as cur:
                     cur.execute(clean_sql, params)
 
@@ -182,7 +191,7 @@ class DatabaseManager:
         """
         # Execute query with parameter
         with self._get_connection() as conn:
-            with conn.transaction(read_only=True):
+            with self._read_only_transaction(conn):
                 with conn.cursor() as cur:
                     cur.execute(sql_text, (schema,))
                     rows = cur.fetchall()
@@ -216,7 +225,7 @@ class DatabaseManager:
         """
 
         with self._get_connection() as conn:
-            with conn.transaction(read_only=True):
+            with self._read_only_transaction(conn):
                 with conn.cursor() as cur:
                     cur.execute(col_sql, (schema, table_name))
                     col_rows = cur.fetchall()
@@ -249,7 +258,7 @@ class DatabaseManager:
         full_sql = prefix + clean_sql
 
         with self._get_connection() as conn:
-            with conn.transaction(read_only=True):
+            with self._read_only_transaction(conn):
                 with conn.cursor() as cur:
                     cur.execute(full_sql)
                     lines = [r[0] for r in cur.fetchall()]
