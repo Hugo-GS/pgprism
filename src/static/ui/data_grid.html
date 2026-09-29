@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PostgreSQL Query Result Data Grid</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #111114;
+      --surface-raised: #18181d;
+      --surface-hover: #1f1f26;
+      --surface-active: #272732;
+      --border: #222227;
+      --border-subtle: #19191e;
+      --border-focus: #3b3b44;
+      --text: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --text-dim: #52525b;
+      --accent: #38bdf8;
+      --accent-dim: rgba(56, 189, 248, 0.12);
+      --accent-border: rgba(56, 189, 248, 0.35);
+      --emerald: #10b981;
+      --emerald-dim: rgba(16, 185, 129, 0.12);
+      --emerald-border: #065f46;
+      --amber: #f59e0b;
+      --amber-dim: rgba(245, 158, 11, 0.12);
+      --amber-border: #78350f;
+      --red: #f43f5e;
+      --red-dim: rgba(244, 63, 94, 0.14);
+      --red-border: #881337;
+      --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Control Bar */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.65rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .badge-demo {
+      background: var(--amber-dim);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+
+    .badge-live {
+      background: var(--emerald-dim);
+      color: var(--emerald);
+      border: 1px solid var(--emerald-border);
+    }
+
+    .badge-truncated {
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid var(--red-border);
+    }
+
+    .controls-center {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex: 1;
+      max-width: 420px;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.65rem;
+      width: 100%;
+      transition: border-color 0.15s ease;
+    }
+
+    .search-box:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+
+    .search-box svg {
+      color: var(--text-muted);
+      margin-right: 0.4rem;
+      flex-shrink: 0;
+    }
+
+    .search-input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 0.8rem;
+      outline: none;
+      width: 100%;
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .btn {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 0.35rem 0.65rem;
+      font-size: 0.78rem;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: var(--border-focus);
+    }
+
+    .btn-primary {
+      background: var(--accent-dim);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+    .btn-primary:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* Grid Area */
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .grid-container {
+      flex: 1;
+      overflow: auto;
+      background: var(--bg);
+      position: relative;
+    }
+
+    table.data-grid {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    table.data-grid th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      font-weight: 600;
+      border-bottom: 2px solid var(--border);
+      border-right: 1px solid var(--border-subtle);
+      user-select: none;
+      cursor: pointer;
+      transition: background 0.12s ease;
+      z-index: 10;
+    }
+
+    table.data-grid th:hover {
+      background: var(--surface-raised);
+      color: var(--text);
+    }
+
+    table.data-grid th .th-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    table.data-grid th .sort-icon {
+      color: var(--text-muted);
+      font-size: 0.7rem;
+    }
+    table.data-grid th.sort-asc .sort-icon {
+      color: var(--accent);
+    }
+    table.data-grid th.sort-desc .sort-icon {
+      color: var(--accent);
+    }
+
+    table.data-grid td {
+      padding: 0.45rem 0.8rem;
+      border-bottom: 1px solid var(--border-subtle);
+      border-right: 1px solid var(--border-subtle);
+      color: var(--text);
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    table.data-grid tr {
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+
+    table.data-grid tr:hover {
+      background: var(--surface-hover);
+    }
+
+    table.data-grid tr.selected {
+      background: rgba(56, 189, 248, 0.08);
+      outline: 1px solid var(--accent-border);
+    }
+
+    .row-index {
+      color: var(--text-muted);
+      width: 45px;
+      text-align: right;
+      background: var(--surface-raised);
+      user-select: none;
+    }
+
+    /* Cell formatters */
+    .cell-null {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .cell-num {
+      text-align: right;
+      color: #93c5fd;
+    }
+    .cell-bool-true {
+      color: var(--emerald);
+      font-weight: 600;
+    }
+    .cell-bool-false {
+      color: var(--red);
+      font-weight: 600;
+    }
+    .cell-obj {
+      color: #c084fc;
+    }
+
+    /* Detail Drawer */
+    .row-drawer {
+      width: 380px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .drawer-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-title {
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+
+    .drawer-body {
+      padding: 1rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .drawer-field {
+      margin-bottom: 0.85rem;
+    }
+
+    .drawer-field-name {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .drawer-field-val {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      background: var(--surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 0.4rem 0.6rem;
+      color: var(--text);
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    /* Footer Pagination & Stats */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      flex-shrink: 0;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-stats {
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+
+    .footer-stats strong {
+      color: var(--text);
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .page-select {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.45rem;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    .page-btn {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.1s ease;
+    }
+    .page-btn:hover:not(:disabled) {
+      background: var(--surface-hover);
+      color: var(--text);
+    }
+    .page-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header>
+    <div class="header-left">
+      <span class="brand-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        Query Results
+      </span>
+      <span id="source-badge" class="badge badge-demo">Interactive Demo</span>
+      <span id="truncated-badge" class="badge badge-truncated" style="display:none;">Truncated</span>
+    </div>
+
+    <!-- Search in table -->
+    <div class="controls-center">
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="filter-input" class="search-input" placeholder="Filter rows across all columns..." oninput="onFilterChanged()">
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn" id="btn-copy" onclick="copyDataJson()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        Copy JSON
+      </button>
+      <button class="btn btn-primary" onclick="exportCsv()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export CSV
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Data View -->
+  <main>
+    <div class="grid-container" id="grid-scroll">
+      <table class="data-grid" id="main-table">
+        <thead id="grid-header"></thead>
+        <tbody id="grid-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Side Inspection Drawer -->
+    <aside class="row-drawer" id="row-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title" id="drawer-title">Row Inspector</span>
+        <button class="btn" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="copyRowJson()">Copy Row</button>
+      </div>
+      <div class="drawer-body" id="drawer-body">
+        <div style="color:var(--text-muted); text-align:center; padding-top:2rem;">
+          Click any row in the grid to inspect all columns, types, and raw values.
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Footer Pagination -->
+  <footer>
+    <div class="footer-stats">
+      <span>Rows: <strong id="stat-showing-rows">0</strong> of <strong id="stat-total-rows">0</strong></span>
+      <span>Columns: <strong id="stat-columns">0</strong></span>
+      <span id="stat-filtered-wrapper" style="display:none; color:var(--amber)">
+        Filtered: <strong id="stat-filtered-count">0</strong> matches
+      </span>
+    </div>
+
+    <div class="pagination">
+      <span style="color:var(--text-muted)">Per page:</span>
+      <select id="page-size-select" class="page-select" onchange="changePageSize(this.value)">
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="all">All</option>
+      </select>
+
+      <button class="page-btn" id="btn-first" onclick="goToPage(1)" title="First page">&laquo;</button>
+      <button class="page-btn" id="btn-prev" onclick="goToPage(currentPage - 1)" title="Previous page">&lsaquo;</button>
+      <span style="color:var(--text); padding:0 0.3rem;" id="pagination-page-label">Page 1 of 1</span>
+      <button class="page-btn" id="btn-next" onclick="goToPage(currentPage + 1)" title="Next page">&rsaquo;</button>
+      <button class="page-btn" id="btn-last" onclick="goToPage(totalPages)" title="Last page">&raquo;</button>
+    </div>
+  </footer>
+
+  <script>
+    // Embedded sample demo payload
+    const DEMO_PAYLOAD = {
+      columns: ["id", "username", "email", "role", "is_active", "account_balance", "created_at", "metadata"],
+      rows: [
+        { id: 1, username: "sarah_connor", email: "sarah@resistance.net", role: "admin", is_active: true, account_balance: 1450.50, created_at: "2026-01-15T09:30:00Z", metadata: { team: "ops", level: 5 } },
+        { id: 2, username: "john_doe", email: "john@example.com", role: "editor", is_active: true, account_balance: 320.00, created_at: "2026-02-01T14:15:22Z", metadata: { team: "content" } },
+        { id: 3, username: "alex_chen", email: "alex.chen@techcorp.io", role: "member", is_active: false, account_balance: 0.00, created_at: "2026-02-18T18:45:00Z", metadata: null },
+        { id: 4, username: "elena_rostova", email: "elena@cybersec.org", role: "admin", is_active: true, account_balance: 8900.75, created_at: "2026-03-04T11:20:10Z", metadata: { certs: ["CISSP", "OSCP"] } },
+        { id: 5, username: "marcus_vance", email: "mvance@enterprise.co", role: "member", is_active: true, account_balance: 12.50, created_at: "2026-03-12T08:00:00Z", metadata: { verified: true } },
+        { id: 6, username: "dev_bot_1", email: null, role: "system", is_active: true, account_balance: 0.00, created_at: "2026-03-15T00:00:00Z", metadata: { agent: true, version: "2.4" } },
+        { id: 7, username: "lucas_muller", email: "lucas@berlin.de", role: "member", is_active: false, account_balance: 75.20, created_at: "2026-03-20T16:30:45Z", metadata: null }
+      ],
+      row_count: 7,
+      truncated: false
+    };
+
+    let rawData = null;
+    let columns = [];
+    let allRows = [];
+    let filteredRows = [];
+    let sortColumn = null;
+    let sortDirection = "none"; // "asc", "desc", "none"
+    let currentPage = 1;
+    let pageSize = 25;
+    let totalPages = 1;
+    let selectedRowIndex = null;
+
+    function sendAppHandshake() {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "ui/initialize",
+            params: {
+              appCapabilities: {}
+            }
+          }, "*");
+          window.parent.postMessage({ jsonrpc: "2.0", method: "ui/ready" }, "*");
+        }
+      } catch (e) {}
+    }
+
+    function extractPayload(msg) {
+      if (!msg) return null;
+      let p = msg.params || msg.result || msg;
+      if (p && p.result) p = p.result;
+      if (p && p.data) p = p.data;
+      if (p && p.structuredContent) p = p.structuredContent;
+
+      if (p && Array.isArray(p.content) && p.content.length > 0) {
+        const textItem = p.content.find(c => c.type === "text" || typeof c.text === "string");
+        if (textItem && typeof textItem.text === "string") {
+          try {
+            return JSON.parse(textItem.text);
+          } catch (e) {
+            return textItem.text;
+          }
+        }
+      }
+
+      if (typeof p === "string") {
+        try { return JSON.parse(p); } catch (e) { return p; }
+      }
+      return p;
+    }
+
+    // MCP Apps postMessage listener
+    window.addEventListener("message", (event) => {
+      if (!event.data) return;
+      let msg = event.data;
+      if (typeof msg === "string") {
+        try { msg = JSON.parse(msg); } catch (e) { return; }
+      }
+
+      if (msg.method === "ui/notifications/tool-result") {
+        const payload = extractPayload(msg.params || msg);
+        if (payload) loadGrid(payload, false);
+      } else if (msg.method === "ui/notifications/tool-input") {
+        console.debug("Received tool-input notification:", msg.params);
+      } else if (msg.method === "ui/init" || msg.method === "ui/initialize" || msg.method === "tool/result" || msg.method === "ontoolresult") {
+        const payload = extractPayload(msg.params || msg);
+        if (payload) loadGrid(payload, false);
+      } else if (msg.result && (msg.result.columns || msg.result.rows || msg.result.content)) {
+        const payload = extractPayload(msg.result);
+        if (payload) loadGrid(payload, false);
+      } else if (msg.type === "tool_result" || (msg.columns && msg.rows) || msg.status === "ok") {
+        loadGrid(msg, false);
+      }
+    });
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", () => {
+        sendAppHandshake();
+        loadGrid(DEMO_PAYLOAD, true);
+      });
+    } else {
+      sendAppHandshake();
+      loadGrid(DEMO_PAYLOAD, true);
+    }
+
+    function loadGrid(data, isDemo = false) {
+      rawData = data;
+      const badge = document.getElementById("source-badge");
+      if (isDemo) {
+        badge.className = "badge badge-demo";
+        badge.textContent = "Interactive Demo";
+      } else {
+        badge.className = "badge badge-live";
+        badge.textContent = "Live Result";
+      }
+
+      const truncBadge = document.getElementById("truncated-badge");
+      if (data.truncated) {
+        truncBadge.style.display = "inline-flex";
+      } else {
+        truncBadge.style.display = "none";
+      }
+
+      columns = data.columns || (data.rows && data.rows.length > 0 ? Object.keys(data.rows[0]) : []);
+      allRows = data.rows || [];
+      filteredRows = [...allRows];
+
+      document.getElementById("stat-columns").textContent = columns.length;
+      document.getElementById("stat-total-rows").textContent = allRows.length;
+
+      sortColumn = null;
+      sortDirection = "none";
+      currentPage = 1;
+      selectedRowIndex = allRows.length > 0 ? 0 : null;
+
+      renderHeader();
+      applyFiltersAndSort();
+
+      if (allRows.length > 0) {
+        selectRow(0);
+      }
+    }
+
+    function renderHeader() {
+      const thead = document.getElementById("grid-header");
+      thead.innerHTML = "";
+      const tr = document.createElement("tr");
+
+      // Row index column header
+      const thIdx = document.createElement("th");
+      thIdx.className = "row-index";
+      thIdx.textContent = "#";
+      tr.appendChild(thIdx);
+
+      columns.forEach(col => {
+        const th = document.createElement("th");
+        th.dataset.column = col;
+        th.onclick = () => toggleSort(col);
+
+        let icon = "⇅";
+        if (sortColumn === col) {
+          if (sortDirection === "asc") { icon = "▲"; th.classList.add("sort-asc"); }
+          else if (sortDirection === "desc") { icon = "▼"; th.classList.add("sort-desc"); }
+        }
+
+        th.innerHTML = `
+          <div class="th-content">
+            <span>${escapeHtml(col)}</span>
+            <span class="sort-icon">${icon}</span>
+          </div>
+        `;
+        tr.appendChild(th);
+      });
+
+      thead.appendChild(tr);
+    }
+
+    function toggleSort(col) {
+      if (sortColumn === col) {
+        if (sortDirection === "none") sortDirection = "asc";
+        else if (sortDirection === "asc") sortDirection = "desc";
+        else { sortDirection = "none"; sortColumn = null; }
+      } else {
+        sortColumn = col;
+        sortDirection = "asc";
+      }
+      renderHeader();
+      applyFiltersAndSort();
+    }
+
+    function onFilterChanged() {
+      applyFiltersAndSort();
+    }
+
+    function applyFiltersAndSort() {
+      const query = document.getElementById("filter-input").value.trim().toLowerCase();
+
+      // 1. Filter
+      if (!query) {
+        filteredRows = [...allRows];
+        document.getElementById("stat-filtered-wrapper").style.display = "none";
+      } else {
+        filteredRows = allRows.filter(row => {
+          return columns.some(col => {
+            const val = row[col];
+            if (val === null || val === undefined) return false;
+            if (typeof val === "object") return JSON.stringify(val).toLowerCase().includes(query);
+            return String(val).toLowerCase().includes(query);
+          });
+        });
+        document.getElementById("stat-filtered-wrapper").style.display = "inline";
+        document.getElementById("stat-filtered-count").textContent = filteredRows.length;
+      }
+
+      // 2. Sort
+      if (sortColumn && sortDirection !== "none") {
+        filteredRows.sort((a, b) => {
+          let va = a[sortColumn];
+          let vb = b[sortColumn];
+          if (va === null || va === undefined) return 1;
+          if (vb === null || vb === undefined) return -1;
+          if (typeof va === "number" && typeof vb === "number") {
+            return sortDirection === "asc" ? va - vb : vb - va;
+          }
+          const sa = String(va);
+          const sb = String(vb);
+          return sortDirection === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+        });
+      }
+
+      // 3. Paginate
+      if (pageSize === "all") {
+        totalPages = 1;
+        currentPage = 1;
+      } else {
+        totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+      }
+
+      renderRows();
+      updatePaginationControls();
+    }
+
+    function renderRows() {
+      const tbody = document.getElementById("grid-body");
+      tbody.innerHTML = "";
+
+      if (filteredRows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${columns.length + 1}" style="text-align:center; padding:3rem; color:var(--text-muted)">No matching records found.</td></tr>`;
+        document.getElementById("stat-showing-rows").textContent = "0";
+        return;
+      }
+
+      let start = 0;
+      let end = filteredRows.length;
+      if (pageSize !== "all") {
+        start = (currentPage - 1) * pageSize;
+        end = Math.min(start + pageSize, filteredRows.length);
+      }
+
+      document.getElementById("stat-showing-rows").textContent = `${start + 1}-${end}`;
+
+      for (let i = start; i < end; i++) {
+        const row = filteredRows[i];
+        const tr = document.createElement("tr");
+        if (selectedRowIndex === i) tr.classList.add("selected");
+        tr.onclick = () => selectRow(i, tr);
+
+        // Index cell
+        const tdIdx = document.createElement("td");
+        tdIdx.className = "row-index";
+        tdIdx.textContent = i + 1;
+        tr.appendChild(tdIdx);
+
+        columns.forEach(col => {
+          const td = document.createElement("td");
+          const val = row[col];
+          td.innerHTML = formatCellValue(val);
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function formatCellValue(val) {
+      if (val === null || val === undefined) {
+        return `<span class="cell-null">NULL</span>`;
+      }
+      if (typeof val === "boolean") {
+        return val ? `<span class="cell-bool-true">true</span>` : `<span class="cell-bool-false">false</span>`;
+      }
+      if (typeof val === "number") {
+        return `<span class="cell-num">${val.toLocaleString()}</span>`;
+      }
+      if (typeof val === "object") {
+        return `<span class="cell-obj">${escapeHtml(JSON.stringify(val))}</span>`;
+      }
+      return escapeHtml(String(val));
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function selectRow(index, trElement = null) {
+      selectedRowIndex = index;
+      document.querySelectorAll("table.data-grid tr.selected").forEach(r => r.classList.remove("selected"));
+      if (trElement) {
+        trElement.classList.add("selected");
+      } else {
+        const allTrs = document.querySelectorAll("table.data-grid tbody tr");
+        if (allTrs[index]) {
+          allTrs[index].classList.add("selected");
+        }
+      }
+
+      const row = filteredRows[index];
+      if (!row) return;
+
+      document.getElementById("drawer-title").textContent = `Row #${index + 1} Details`;
+      const body = document.getElementById("drawer-body");
+      body.innerHTML = "";
+
+      columns.forEach(col => {
+        const val = row[col];
+        let valStr = val === null ? "NULL" : (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val));
+
+        const field = document.createElement("div");
+        field.className = "drawer-field";
+
+        const fieldName = document.createElement("div");
+        fieldName.className = "drawer-field-name";
+
+        const strong = document.createElement("strong");
+        strong.textContent = col;
+        fieldName.appendChild(strong);
+
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "btn";
+        copyBtn.style.padding = "0.1rem 0.35rem";
+        copyBtn.style.fontSize = "0.65rem";
+        copyBtn.textContent = "Copy";
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(valStr).then(() => {
+            const orig = copyBtn.textContent;
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => { copyBtn.textContent = orig; }, 1200);
+          });
+        };
+        fieldName.appendChild(copyBtn);
+
+        const fieldVal = document.createElement("div");
+        fieldVal.className = "drawer-field-val";
+        fieldVal.textContent = valStr;
+
+        field.appendChild(fieldName);
+        field.appendChild(fieldVal);
+        body.appendChild(field);
+      });
+    }
+
+    function updatePaginationControls() {
+      document.getElementById("pagination-page-label").textContent = `Page ${currentPage} of ${totalPages}`;
+      document.getElementById("btn-first").disabled = (currentPage <= 1);
+      document.getElementById("btn-prev").disabled = (currentPage <= 1);
+      document.getElementById("btn-next").disabled = (currentPage >= totalPages);
+      document.getElementById("btn-last").disabled = (currentPage >= totalPages);
+    }
+
+    function goToPage(page) {
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      renderRows();
+      updatePaginationControls();
+      document.getElementById("grid-scroll").scrollTop = 0;
+    }
+
+    function changePageSize(size) {
+      pageSize = size === "all" ? "all" : parseInt(size, 10);
+      currentPage = 1;
+      applyFiltersAndSort();
+    }
+
+    function copyRowJson() {
+      if (selectedRowIndex === null || !filteredRows[selectedRowIndex]) return;
+      const json = JSON.stringify(filteredRows[selectedRowIndex], null, 2);
+      navigator.clipboard.writeText(json);
+    }
+
+    function copyDataJson() {
+      const dataToCopy = filteredRows.length > 0 ? filteredRows : allRows;
+      const json = JSON.stringify(dataToCopy, null, 2);
+      navigator.clipboard.writeText(json).then(() => {
+        const btn = document.getElementById("btn-copy");
+        const orig = btn.innerHTML;
+        btn.innerHTML = `<span style="color:var(--emerald)">Copied!</span>`;
+        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+      });
+    }
+
+    function exportCsv() {
+      if (columns.length === 0) return;
+      const query = document.getElementById("filter-input").value.trim();
+      const targetRows = query ? filteredRows : allRows;
+
+      const csvLines = [];
+      // Header
+      csvLines.push(columns.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","));
+
+      // Rows
+      targetRows.forEach(row => {
+        const line = columns.map(c => {
+          const v = row[c];
+          if (v === null || v === undefined) return "";
+          const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+          return `"${s.replace(/"/g, '""')}"`;
+        }).join(",");
+        csvLines.push(line);
+      });
+
+      const csvBlob = new Blob([csvLines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(csvBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `query_results_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "_")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

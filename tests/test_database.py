@@ -59,7 +59,9 @@ def test_execute_query_formats_results(sample_profile: Profile):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
 
-    with patch.object(db, "_get_connection", return_value=mock_conn):
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
         result = db.execute_query("SELECT id, username FROM users", max_rows=10)
 
         # Ensure the transaction uses the current psycopg API and is explicitly read-only.
@@ -90,7 +92,9 @@ def test_execute_query_truncation(sample_profile: Profile):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
 
-    with patch.object(db, "_get_connection", return_value=mock_conn):
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
         result = db.execute_query("SELECT id FROM users", max_rows=2)
         assert result["row_count"] == 2
         assert result["truncated"] is True
@@ -111,7 +115,9 @@ def test_list_tables(sample_profile: Profile):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
 
-    with patch.object(db, "_get_connection", return_value=mock_conn):
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
         tables = db.list_tables(schema="public")
         assert len(tables) == 2
         assert tables[0] == {"table_name": "users", "table_type": "BASE TABLE"}
@@ -133,7 +139,9 @@ def test_describe_table(sample_profile: Profile):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
 
-    with patch.object(db, "_get_connection", return_value=mock_conn):
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
         desc = db.describe_table("users", schema="public")
         assert desc["table"] == "users"
         assert len(desc["columns"]) == 2
@@ -156,9 +164,55 @@ def test_explain_query(sample_profile: Profile):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
 
-    with patch.object(db, "_get_connection", return_value=mock_conn):
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
         plan = db.explain_query("SELECT * FROM users")
         assert "Seq Scan on users" in plan
+
+
+def test_explain_query_json_raw_string(sample_profile: Profile):
+    db = DatabaseManager(sample_profile)
+
+    json_str = '[{"Plan": {"Node Type": "Seq Scan", "Relation Name": "users", "Startup Cost": 0.0, "Total Cost": 1.02, "Plan Rows": 2, "Plan Width": 36}}]'
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [(json_str,)]
+
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
+
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
+        plan = db.explain_query("SELECT * FROM users", analyze=True, as_json=True)
+        mock_cursor.execute.assert_called_with("EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS) SELECT * FROM users")
+        assert isinstance(plan, list)
+        assert len(plan) == 1
+        assert plan[0]["Plan"]["Node Type"] == "Seq Scan"
+        assert plan[0]["Plan"]["Relation Name"] == "users"
+
+
+def test_explain_query_json_preparsed_object(sample_profile: Profile):
+    db = DatabaseManager(sample_profile)
+
+    parsed_obj = [{"Plan": {"Node Type": "Index Scan", "Relation Name": "users", "Total Cost": 0.5}}]
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [(parsed_obj,)]
+
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
+
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
+        plan = db.explain_query("SELECT * FROM users WHERE id = 1", analyze=False, as_json=True)
+        mock_cursor.execute.assert_called_with("EXPLAIN (FORMAT JSON) SELECT * FROM users WHERE id = 1")
+        assert plan == parsed_obj
+
 
 
 def test_list_databases(sample_profile: Profile):
@@ -174,7 +228,9 @@ def test_list_databases(sample_profile: Profile):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.transaction.return_value.__enter__.return_value = MagicMock()
 
-    with patch.object(db, "_get_connection", return_value=mock_conn):
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+    with patch.object(db, "_get_pool", return_value=mock_pool):
         dbs = db.list_databases()
         assert dbs == ["postgres", "analytics", "ecommerce"]
 
@@ -191,3 +247,40 @@ def test_set_database(sample_profile: Profile):
         db.set_database("")
 
 
+from src.database import _pool_key, _pool_cache
+
+def test_pool_key(sample_profile: Profile):
+    key1 = _pool_key(sample_profile, "db1")
+    key2 = _pool_key(sample_profile, "db2")
+    assert key1 == "localhost:5432/db1/test_user/prefer"
+    assert key2 == "localhost:5432/db2/test_user/prefer"
+    assert key1 != key2
+
+
+def test_get_pool_instantiates_connection_pool(sample_profile: Profile):
+    db = DatabaseManager(sample_profile)
+    try:
+        with patch("src.database.ConnectionPool") as mock_cp:
+            mock_cp.return_value = MagicMock()
+            pool = db._get_pool("custom_test_db")
+            assert pool == mock_cp.return_value
+            mock_cp.assert_called_once()
+            args, kwargs = mock_cp.call_args
+            assert "dbname=custom_test_db" in args[0]
+            assert kwargs["min_size"] == 1
+            assert kwargs["max_size"] == 3
+    finally:
+        _pool_cache.clear()
+
+
+def test_serialize_value_handles_nan_and_infinity():
+    from decimal import Decimal
+    from src.database import _serialize_value
+
+    assert _serialize_value(Decimal("NaN")) is None
+    assert _serialize_value(Decimal("Infinity")) is None
+    assert _serialize_value(Decimal("-Infinity")) is None
+    assert _serialize_value(float("nan")) is None
+    assert _serialize_value(float("inf")) is None
+    assert _serialize_value(Decimal("123.45")) == 123.45
+    assert _serialize_value(Decimal("100")) == 100

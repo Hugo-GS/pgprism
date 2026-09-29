@@ -8,6 +8,7 @@ Features:
   - **Session Layer**: Enforces `SET default_transaction_read_only = on` and runs all queries inside explicit read-only transactions at the PostgreSQL engine level.
 - **Local SQLite Profile Storage**: Store and switch database credentials locally without cloud tokens or external dependencies.
 - **Web Configuration UI**: A clean, local web dashboard to manage profiles, test connectivity, and activate databases.
+- **Interactive MCP UI (MCP Apps)**: Built-in rich in-chat UI components for query plan visualization (`explain_query`) and tabular data inspection (`read_query`) following the official `@modelcontextprotocol/ext-apps` standard.
 - **Pragmatic Modular Architecture**: Zero enterprise boilerplate or unnecessary abstract classes.
 
 ---
@@ -62,9 +63,44 @@ src/
 | `list_tables` | `schema: str = "public"` | Lists tables and views in the schema. |
 | `describe_table` | `table: str, schema: str = "public"` | Inspects column types, nullability, defaults, and primary keys. |
 | `explain_query` | `query: str, analyze: bool = False` | Returns the EXPLAIN query execution plan. |
+| `list_indexes` | `table: str, schema: str = "public"` | Lists indexes on a table with their definitions. |
+| `list_foreign_keys` | `table: str, schema: str = "public"` | Lists foreign key relationships for a table. |
+| `list_constraints` | `table: str, schema: str = "public"` | Lists CHECK, UNIQUE, and EXCLUDE constraints. |
+| `table_stats` | `table: str, schema: str = "public"` | Shows row estimates, dead tuples, vacuum info, scan counts. |
+| `running_queries` | _none_ | Shows active queries with duration and wait events. |
+| `database_size` | _none_ | Returns database and table/index sizes. |
+| `test_connection` | _none_ | Verifies connectivity to the active database and returns PostgreSQL version. |
 | `get_active_profile` | _none_ | Displays active database profile metadata (password masked). |
 | `list_profiles` | _none_ | Lists all stored database profiles. |
+| `search_profiles` | `query: str` | Searches stored profiles by partial match on name, host, or database. |
 | `switch_profile` | `profile_name: str` | Switches active database profile on the fly. |
+
+---
+
+## MCP Resources Available
+
+Resources provide passive, browsable access to the database structure without tool calls.
+
+| Resource URI | Description |
+| :--- | :--- |
+| `postgres://profiles` | List of stored connection profiles. |
+| `postgres://schemas` | Schemas in the active database. |
+| `postgres://schemas/{schema}/tables` | Tables and views in a schema. |
+| `postgres://schemas/{schema}/tables/{table}` | Column details, types, and primary keys for a table. |
+| `ui://postgres/explain-viewer` | Interactive execution plan visualizer and bottleneck inspector (MCP Apps UI). |
+| `ui://postgres/data-grid` | Interactive query results data grid with sorting, filtering, and CSV export (MCP Apps UI). |
+
+---
+
+## MCP Prompts Available
+
+Prompts provide structured debugging workflows for the agent.
+
+| Prompt | Parameters | Description |
+| :--- | :--- | :--- |
+| `debug_slow_query` | `query: str` | Guides EXPLAIN ANALYZE, index check, and optimization suggestions. |
+| `explore_table` | `table: str, schema: str` | Comprehensive table exploration: schema, indexes, FKs, stats, sample data. |
+| `find_data_issues` | `table: str, schema: str` | Checks for NULLs, duplicates, orphan FKs, and empty strings. |
 
 ---
 
@@ -91,6 +127,29 @@ Configure the command:
   "command": "/path/to/mcp-postgresql/.venv/bin/mcp-postgresql"
 }
 ```
+
+---
+
+## Security Notes
+
+### Read-Only Enforcement
+All queries pass through two defense layers:
+1. **AST Layer**: `sqlglot` parses and validates queries, rejecting mutations.
+2. **Session Layer**: PostgreSQL `default_transaction_read_only = on` + explicit `SET TRANSACTION READ ONLY`.
+
+### Statement Timeout
+Each profile has a configurable `statement_timeout_ms` (default: 30,000ms / 30s). This prevents runaway queries from consuming server resources. Configure via the Web UI or when creating profiles.
+
+### EXPLAIN ANALYZE
+The `explain_query` tool with `analyze=True` **actually executes the query** to collect real timing data. While the query itself is validated as read-only, complex analytical queries may impact server performance. Use with caution on production databases.
+
+### Password Storage
+Connection passwords are stored **unencrypted** in the local SQLite database at `~/.config/mcp-postgresql/profiles.db`. This is acceptable for local development debugging. For production environments, consider:
+- Using `PGPASSFILE` or environment variables
+- OS keychain integration (planned for a future release)
+
+### Tool Annotations
+All MCP tools declare `readOnlyHint: true` and `destructiveHint: false` in their annotations, allowing MCP clients to auto-approve tool execution without user confirmation.
 
 ---
 

@@ -101,3 +101,103 @@ def test_database_field_optional_defaults_to_postgres(temp_storage: ProfileStora
     )
     assert p2.database == "postgres"
 
+
+def test_statement_timeout_ms_default(temp_storage: ProfileStorage):
+    p1 = temp_storage.save_profile(
+        ProfileCreate(name="timeout-default", username="postgres")
+    )
+    assert p1.statement_timeout_ms == 30000
+
+def test_statement_timeout_ms_persistence(temp_storage: ProfileStorage):
+    p2 = temp_storage.save_profile(
+        ProfileCreate(name="timeout-custom", username="postgres", statement_timeout_ms=50000)
+    )
+    assert p2.statement_timeout_ms == 50000
+    retrieved = temp_storage.get_profile(p2.id)
+    assert retrieved is not None
+    assert retrieved.statement_timeout_ms == 50000
+
+    updated = temp_storage.update_profile(
+        p2.id, ProfileCreate(name="timeout-custom", username="postgres", statement_timeout_ms=60000)
+    )
+    assert updated.statement_timeout_ms == 60000
+
+
+def test_get_active_profile_fallback_to_first_when_none_active(temp_storage: ProfileStorage):
+    p1 = temp_storage.save_profile(ProfileCreate(name="first-db", username="postgres"))
+    p2 = temp_storage.save_profile(ProfileCreate(name="second-db", username="postgres"))
+
+    # Deactivate all profiles manually
+    with temp_storage._get_connection() as conn:
+        conn.execute("UPDATE profiles SET is_active = 0")
+        conn.commit()
+
+    # Should fallback to the first stored profile
+    active = temp_storage.get_active_profile()
+    assert active is not None
+    assert active.id == p1.id
+    assert active.name == "first-db"
+
+
+def test_get_active_profile_fallback_to_database_url(temp_storage: ProfileStorage, monkeypatch: pytest.MonkeyPatch):
+    assert temp_storage.get_active_profile() is None
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://pguser:secretpass@remotedb:5433/prod_data?sslmode=require",
+    )
+    profile = temp_storage.get_active_profile()
+    assert profile is not None
+    assert profile.name == "env-default"
+    assert profile.host == "remotedb"
+    assert profile.port == 5433
+    assert profile.database == "prod_data"
+    assert profile.username == "pguser"
+    assert profile.password == "secretpass"
+    assert profile.sslmode == "require"
+
+
+def test_get_active_profile_fallback_to_pghost_vars(temp_storage: ProfileStorage, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("PGHOST", "postgres.internal")
+    monkeypatch.setenv("PGPORT", "5434")
+    monkeypatch.setenv("PGDATABASE", "app_db")
+    monkeypatch.setenv("PGUSER", "app_admin")
+    monkeypatch.setenv("PGPASSWORD", "envpassword")
+
+    profile = temp_storage.get_active_profile()
+    assert profile is not None
+    assert profile.name == "env-default"
+    assert profile.host == "postgres.internal"
+    assert profile.port == 5434
+    assert profile.database == "app_db"
+    assert profile.username == "app_admin"
+    assert profile.password == "envpassword"
+
+
+def test_search_profiles(temp_storage: ProfileStorage):
+    temp_storage.save_profile(ProfileCreate(name="analytics-prod", host="prod.db.internal", database="warehouse", username="pguser"))
+    temp_storage.save_profile(ProfileCreate(name="analytics-staging", host="stage.db.internal", database="warehouse_stg", username="pguser"))
+    temp_storage.save_profile(ProfileCreate(name="billing-db", host="payments.internal", database="invoices", username="pguser"))
+
+    # Partial name match
+    results = temp_storage.search_profiles("analytics")
+    assert len(results) == 2
+    assert {r.name for r in results} == {"analytics-prod", "analytics-staging"}
+
+    # Partial host match
+    results = temp_storage.search_profiles("payments")
+    assert len(results) == 1
+    assert results[0].name == "billing-db"
+
+    # Partial database match
+    results = temp_storage.search_profiles("warehouse")
+    assert len(results) == 2
+
+    # Empty or whitespace query
+    assert temp_storage.search_profiles("") == []
+    assert temp_storage.search_profiles("   ") == []
+
+    # No match
+    assert temp_storage.search_profiles("nonexistent_cluster") == []
+
+

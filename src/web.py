@@ -1,5 +1,6 @@
 """Local Web Configuration UI for PostgreSQL MCP Server."""
 
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, status
@@ -31,8 +32,46 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
             )
         return FileResponse(INDEX_FILE)
 
+    @app.get("/ui/explain-viewer", response_class=FileResponse)
+    def ui_explain_viewer():
+        file_path = STATIC_DIR / "ui" / "explain_viewer.html"
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Explain viewer UI component not found.",
+            )
+        return FileResponse(file_path)
+
+    @app.get("/ui/data-grid", response_class=FileResponse)
+    def ui_data_grid():
+        file_path = STATIC_DIR / "ui" / "data_grid.html"
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Data grid UI component not found.",
+            )
+        return FileResponse(file_path)
+
+    @app.get("/api/info")
+    def get_info():
+        repo_root = Path(__file__).resolve().parent.parent
+        venv_python = repo_root / ".venv" / "bin" / "python3"
+        python_exec = str(venv_python) if venv_python.exists() else sys.executable
+        cli_command = repo_root / ".venv" / "bin" / "mcp-postgresql"
+        active = store.get_active_profile()
+        return {
+            "project_root": str(repo_root),
+            "python_executable": python_exec,
+            "cli_command": str(cli_command) if cli_command.exists() else "mcp-postgresql",
+            "server_module": "src.server",
+            "active_profile": active.name if active else None,
+            "active_database": active.database if active else None,
+        }
+
     @app.get("/api/profiles", response_model=List[Profile])
-    def list_profiles():
+    def list_profiles(q: Optional[str] = None):
+        if q and q.strip():
+            return store.search_profiles(q.strip())
         return store.list_profiles()
 
     @app.post("/api/profiles", response_model=Profile, status_code=status.HTTP_201_CREATED)

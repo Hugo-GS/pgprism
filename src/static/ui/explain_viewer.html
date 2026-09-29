@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PostgreSQL Query Execution Plan</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #111114;
+      --surface-raised: #18181d;
+      --surface-hover: #1f1f26;
+      --surface-active: #272732;
+      --border: #222227;
+      --border-subtle: #19191e;
+      --border-focus: #3b3b44;
+      --text: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --text-dim: #52525b;
+      --accent: #38bdf8;
+      --accent-dim: rgba(56, 189, 248, 0.12);
+      --accent-border: rgba(56, 189, 248, 0.35);
+      --emerald: #10b981;
+      --emerald-dim: rgba(16, 185, 129, 0.12);
+      --emerald-border: #065f46;
+      --amber: #f59e0b;
+      --amber-dim: rgba(245, 158, 11, 0.12);
+      --amber-border: #78350f;
+      --red: #f43f5e;
+      --red-dim: rgba(244, 63, 94, 0.14);
+      --red-border: #881337;
+      --purple: #a855f7;
+      --purple-dim: rgba(168, 85, 247, 0.12);
+      --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header Bar */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.65rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .brand-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .badge-demo {
+      background: var(--amber-dim);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+
+    .badge-live {
+      background: var(--emerald-dim);
+      color: var(--emerald);
+      border: 1px solid var(--emerald-border);
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 0.35rem 0.8rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--surface-hover);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 0.35rem 0.7rem;
+      font-size: 0.78rem;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+      border-color: var(--border-focus);
+    }
+
+    .btn-primary {
+      background: var(--accent-dim);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+    .btn-primary:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* Metric Bar */
+    .metric-strip {
+      background: var(--surface-raised);
+      border-bottom: 1px solid var(--border);
+      padding: 0.45rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .metric-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .metric-label {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+    }
+
+    .metric-val {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .metric-val.highlight {
+      color: var(--accent);
+    }
+
+    /* Main Content Area */
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .view-panel {
+      flex: 1;
+      display: none;
+      height: 100%;
+      overflow: auto;
+      padding: 1.25rem;
+    }
+
+    .view-panel.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Visual Tree View */
+    #view-tree {
+      display: none;
+      flex-direction: row;
+      padding: 0;
+      overflow: hidden;
+    }
+    #view-tree.active {
+      display: flex;
+    }
+
+    .tree-canvas-container {
+      flex: 1;
+      overflow: auto;
+      padding: 2rem;
+      position: relative;
+    }
+
+    .tree-node-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .node-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      min-width: 250px;
+      max-width: 320px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      position: relative;
+    }
+
+    .node-card:hover {
+      border-color: var(--accent-border);
+      background: var(--surface-raised);
+      transform: translateY(-2px);
+    }
+
+    .node-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim), 0 6px 20px rgba(56, 189, 248, 0.2);
+    }
+
+    .node-card.bottleneck-severe {
+      border-color: var(--red);
+      background: rgba(244, 63, 94, 0.05);
+    }
+    .node-card.bottleneck-warning {
+      border-color: var(--amber);
+      background: rgba(245, 158, 11, 0.04);
+    }
+
+    .node-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .node-type {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    .node-subtext {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      margin-bottom: 0.5rem;
+      word-break: break-all;
+    }
+
+    .cost-bar-container {
+      height: 4px;
+      background: var(--surface-active);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 0.55rem;
+    }
+    .cost-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+    .cost-bar-fill.red { background: var(--red); }
+    .cost-bar-fill.amber { background: var(--amber); }
+
+    .node-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.35rem 0.65rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 0.45rem;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .stat-lbl { color: var(--text-muted); }
+    .stat-val { color: var(--text); font-weight: 500; }
+
+    /* Tree hierarchy links */
+    .children-container {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      gap: 1.5rem;
+      margin-top: 2rem;
+      position: relative;
+    }
+
+    .children-container::before {
+      content: "";
+      position: absolute;
+      top: -1rem;
+      left: 20px;
+      right: 20px;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .tree-node-wrapper::before {
+      content: "";
+      position: absolute;
+      top: -1rem;
+      width: 1px;
+      height: 1rem;
+      background: var(--border);
+    }
+    .tree-root > .node-card::after {
+      display: none;
+    }
+    .has-children > .node-card::after {
+      content: "";
+      position: absolute;
+      bottom: -1rem;
+      left: 50%;
+      width: 1px;
+      height: 1rem;
+      background: var(--border);
+    }
+
+    /* Detail Drawer Panel */
+    .detail-drawer {
+      width: 360px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: width 0.2s ease;
+    }
+
+    .drawer-header {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-title {
+      font-weight: 600;
+      font-size: 0.88rem;
+    }
+
+    .drawer-content {
+      padding: 1rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .prop-group {
+      margin-bottom: 1.2rem;
+    }
+
+    .prop-group-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+    }
+
+    .prop-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      font-family: var(--font-mono);
+    }
+
+    .prop-table td {
+      padding: 0.35rem 0.45rem;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: top;
+    }
+
+    .prop-table td.key {
+      color: var(--text-secondary);
+      width: 40%;
+    }
+
+    .prop-table td.val {
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    /* Bottlenecks & Summary View */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.1rem;
+    }
+
+    .summary-card-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .alert-item {
+      padding: 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 0.6rem;
+      font-size: 0.78rem;
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-start;
+    }
+    .alert-danger {
+      background: var(--red-dim);
+      border: 1px solid var(--red-border);
+      color: #fda4af;
+    }
+    .alert-warning {
+      background: var(--amber-dim);
+      border: 1px solid var(--amber-border);
+      color: #fde68a;
+    }
+    .alert-info {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-border);
+      color: #bae6fd;
+    }
+
+    .alert-body strong {
+      display: block;
+      margin-bottom: 0.15rem;
+      color: var(--text);
+    }
+
+    .table-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+
+    table.data-table th {
+      background: var(--surface-raised);
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+    }
+
+    table.data-table td {
+      padding: 0.55rem 0.8rem;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text);
+      font-family: var(--font-mono);
+    }
+
+    table.data-table tr:hover {
+      background: var(--surface-hover);
+    }
+
+    /* Raw View */
+    .raw-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      height: 100%;
+      overflow: auto;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: #e4e4e7;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    /* Utilities */
+    .pill {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .pill-red { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-border); }
+    .pill-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+    .pill-emerald { background: var(--emerald-dim); color: var(--emerald); border: 1px solid var(--emerald-border); }
+    .pill-blue { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <span class="brand-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        PostgreSQL Execution Plan
+      </span>
+      <span id="source-badge" class="badge badge-demo">Interactive Demo</span>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchView('tree')">Visual Tree</button>
+      <button class="tab-btn" onclick="switchView('summary')">Summary & Bottlenecks</button>
+      <button class="tab-btn" onclick="switchView('raw')">Raw Plan</button>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn" id="btn-copy" onclick="copyCurrentPlan()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        Copy
+      </button>
+      <button class="btn btn-primary" onclick="fitView()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+        Reset Zoom
+      </button>
+    </div>
+  </header>
+
+  <!-- Metric Strip -->
+  <div class="metric-strip" id="metric-strip">
+    <div class="metric-item">
+      <span class="metric-label">Total Time</span>
+      <span class="metric-val highlight" id="metric-total-time">-</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">Planning Time</span>
+      <span class="metric-val" id="metric-planning-time">-</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">Execution Time</span>
+      <span class="metric-val" id="metric-exec-time">-</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">Total Cost</span>
+      <span class="metric-val" id="metric-total-cost">-</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">Actual Rows</span>
+      <span class="metric-val" id="metric-actual-rows">-</span>
+    </div>
+    <div class="metric-item">
+      <span class="metric-label">Peak Bottleneck</span>
+      <span class="metric-val" id="metric-peak-node" style="color:var(--amber)">-</span>
+    </div>
+  </div>
+
+  <!-- Main Viewports -->
+  <main>
+    <!-- View 1: Interactive Visual Tree -->
+    <div id="view-tree" class="view-panel active">
+      <div class="tree-canvas-container" id="tree-canvas">
+        <div id="tree-root-container" style="display:flex; justify-content:center;">
+          <!-- Dynamically generated node hierarchy -->
+        </div>
+      </div>
+
+      <!-- Detail Inspector Drawer -->
+      <aside class="detail-drawer" id="node-drawer">
+        <div class="drawer-header">
+          <span class="drawer-title" id="drawer-node-name">Node Details</span>
+          <span id="drawer-cost-pill" class="pill pill-blue">Cost</span>
+        </div>
+        <div class="drawer-content" id="drawer-content">
+          <div style="color:var(--text-muted); text-align:center; padding-top:2rem;">
+            Click on any node in the execution tree to inspect properties, buffers, and filter conditions.
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- View 2: Summary & Bottlenecks -->
+    <div id="view-summary" class="view-panel">
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--amber)"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Bottlenecks & Optimization Alerts
+          </div>
+          <div id="bottlenecks-list">
+            <!-- Dynamic alerts -->
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></svg>
+            Execution Distribution
+          </div>
+          <div id="execution-breakdown" style="font-family:var(--font-mono); font-size:0.75rem;">
+            <!-- Breakdown stats -->
+          </div>
+        </div>
+      </div>
+
+      <div class="summary-card" style="margin-bottom: 1.5rem;">
+        <div class="summary-card-title">
+          Top Expensive Operations by Cost & Time
+        </div>
+        <div class="table-container">
+          <table class="data-table" id="top-nodes-table">
+            <thead>
+              <tr>
+                <th>Operation</th>
+                <th>Relation / Condition</th>
+                <th>Actual Time</th>
+                <th>Total Cost</th>
+                <th>Rows (Act / Est)</th>
+                <th>Est. Accuracy</th>
+                <th>Cost %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 3: Raw Plan Text / JSON -->
+    <div id="view-raw" class="view-panel">
+      <div style="margin-bottom:0.75rem; display:flex; gap:0.5rem;">
+        <button class="btn btn-primary" onclick="setRawFormat('json')">JSON Plan</button>
+        <button class="btn" onclick="setRawFormat('text')">Text Explain</button>
+      </div>
+      <div class="raw-container" id="raw-content"></div>
+    </div>
+  </main>
+
+  <script>
+    // Embedded sample demo payload (renders when launched standalone or testing)
+    const DEMO_PAYLOAD = {
+      status: "ok",
+      plan_json: [
+        {
+          "Plan": {
+            "Node Type": "Hash Join",
+            "Parallel Aware": false,
+            "Join Type": "Inner",
+            "Startup Cost": 142.50,
+            "Total Cost": 845.20,
+            "Plan Rows": 1250,
+            "Plan Width": 128,
+            "Actual Startup Time": 3.450,
+            "Actual Total Time": 18.230,
+            "Actual Rows": 1240,
+            "Actual Loops": 1,
+            "Hash Cond": "(o.user_id = u.id)",
+            "Shared Hit Blocks": 842,
+            "Shared Read Blocks": 12,
+            "Plans": [
+              {
+                "Node Type": "Seq Scan",
+                "Parent Relationship": "Outer",
+                "Relation Name": "orders",
+                "Schema": "public",
+                "Alias": "o",
+                "Startup Cost": 0.00,
+                "Total Cost": 520.00,
+                "Plan Rows": 12500,
+                "Plan Width": 64,
+                "Actual Startup Time": 0.050,
+                "Actual Total Time": 8.120,
+                "Actual Rows": 12500,
+                "Actual Loops": 1,
+                "Filter": "(status = 'completed'::text)",
+                "Rows Removed by Filter": 3500,
+                "Shared Hit Blocks": 520
+              },
+              {
+                "Node Type": "Hash",
+                "Parent Relationship": "Inner",
+                "Startup Cost": 85.00,
+                "Total Cost": 85.00,
+                "Plan Rows": 2500,
+                "Plan Width": 64,
+                "Actual Startup Time": 2.800,
+                "Actual Total Time": 2.800,
+                "Actual Rows": 2500,
+                "Actual Loops": 1,
+                "Hash Buckets": 4096,
+                "Hash Batches": 1,
+                "Original Hash Batches": 1,
+                "Peak Memory Usage": 185,
+                "Shared Hit Blocks": 85,
+                "Plans": [
+                  {
+                    "Node Type": "Index Scan",
+                    "Parent Relationship": "Outer",
+                    "Relation Name": "users",
+                    "Schema": "public",
+                    "Alias": "u",
+                    "Index Name": "idx_users_active",
+                    "Index Cond": "(is_active = true)",
+                    "Startup Cost": 0.28,
+                    "Total Cost": 85.00,
+                    "Plan Rows": 2500,
+                    "Plan Width": 64,
+                    "Actual Startup Time": 0.040,
+                    "Actual Total Time": 1.950,
+                    "Actual Rows": 2500,
+                    "Actual Loops": 1,
+                    "Shared Hit Blocks": 85
+                  }
+                ]
+              }
+            ]
+          },
+          "Planning Time": 0.420,
+          "Execution Time": 19.150,
+          "Triggers": []
+        }
+      ],
+      plan: `Hash Join  (cost=142.50..845.20 rows=1250 width=128) (actual time=3.450..18.230 rows=1240 loops=1)\n  Hash Cond: (o.user_id = u.id)\n  Buffers: shared hit=842 read=12\n  ->  Seq Scan on orders o  (cost=0.00..520.00 rows=12500 width=64) (actual time=0.050..8.120 rows=12500 loops=1)\n        Filter: (status = 'completed'::text)\n        Rows Removed by Filter: 3500\n        Buffers: shared hit=520\n  ->  Hash  (cost=85.00..85.00 rows=2500 width=64) (actual time=2.800..2.800 rows=2500 loops=1)\n        Buckets: 4096  Batches: 1  Memory Usage: 185kB\n        Buffers: shared hit=85\n        ->  Index Scan using idx_users_active on users u  (cost=0.28..85.00 rows=2500 width=64) (actual time=0.040..1.950 rows=2500 loops=1)\n              Index Cond: (is_active = true)\n              Buffers: shared hit=85\nPlanning Time: 0.420 ms\nExecution Time: 19.150 ms`
+    };
+
+    let currentPlanData = null;
+    let flatNodes = [];
+    let selectedNode = null;
+    let rawFormatMode = "json";
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function sendAppHandshake() {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "ui/initialize",
+            params: {
+              appCapabilities: {}
+            }
+          }, "*");
+          window.parent.postMessage({ jsonrpc: "2.0", method: "ui/ready" }, "*");
+        }
+      } catch (e) {}
+    }
+
+    function extractPayload(msg) {
+      if (!msg) return null;
+      let p = msg.params || msg.result || msg;
+      if (p && p.result) p = p.result;
+      if (p && p.data) p = p.data;
+      if (p && p.structuredContent) p = p.structuredContent;
+
+      if (p && Array.isArray(p.content) && p.content.length > 0) {
+        const textItem = p.content.find(c => c.type === "text" || typeof c.text === "string");
+        if (textItem && typeof textItem.text === "string") {
+          try {
+            return JSON.parse(textItem.text);
+          } catch (e) {
+            return textItem.text;
+          }
+        }
+      }
+
+      if (typeof p === "string") {
+        try { return JSON.parse(p); } catch (e) { return p; }
+      }
+      return p;
+    }
+
+    // MCP Apps postMessage bridge
+    window.addEventListener("message", (event) => {
+      if (!event.data) return;
+      let msg = event.data;
+      if (typeof msg === "string") {
+        try { msg = JSON.parse(msg); } catch (e) { return; }
+      }
+
+      // Check MCP Apps JSON-RPC methods or direct data
+      if (msg.method === "ui/notifications/tool-result") {
+        const payload = extractPayload(msg.params || msg);
+        if (payload) loadPlan(payload, false);
+      } else if (msg.method === "ui/notifications/tool-input") {
+        console.debug("Received tool-input notification:", msg.params);
+      } else if (msg.method === "ui/init" || msg.method === "ui/initialize" || msg.method === "tool/result" || msg.method === "ontoolresult") {
+        const payload = extractPayload(msg.params || msg);
+        if (payload) loadPlan(payload, false);
+      } else if (msg.result && (msg.result.plan || msg.result.plan_json || msg.result.content)) {
+        const payload = extractPayload(msg.result);
+        if (payload) loadPlan(payload, false);
+      } else if (msg.type === "tool_result" || msg.status === "ok" || msg.plan_json || msg.plan || Array.isArray(msg)) {
+        loadPlan(msg, false);
+      }
+    });
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", () => {
+        sendAppHandshake();
+        loadPlan(DEMO_PAYLOAD, true);
+      });
+    } else {
+      sendAppHandshake();
+      loadPlan(DEMO_PAYLOAD, true);
+    }
+
+    function loadPlan(data, isDemo = false) {
+      currentPlanData = data;
+      const badge = document.getElementById("source-badge");
+      if (isDemo) {
+        badge.className = "badge badge-demo";
+        badge.textContent = "Interactive Demo";
+      } else {
+        badge.className = "badge badge-live";
+        badge.textContent = "Live Result";
+      }
+
+      // Extract JSON root
+      let rootPlan = null;
+      let planningTime = null;
+      let executionTime = null;
+
+      if (data && data.plan_json) {
+        const pj = data.plan_json;
+        if (Array.isArray(pj) && pj.length > 0) {
+          rootPlan = pj[0].Plan || pj[0];
+          planningTime = pj[0]["Planning Time"];
+          executionTime = pj[0]["Execution Time"];
+        } else if (pj.Plan) {
+          rootPlan = pj.Plan;
+          planningTime = pj["Planning Time"];
+          executionTime = pj["Execution Time"];
+        }
+      } else if (Array.isArray(data) && data.length > 0 && data[0].Plan) {
+        rootPlan = data[0].Plan;
+        planningTime = data[0]["Planning Time"];
+        executionTime = data[0]["Execution Time"];
+      } else if (data && data.Plan) {
+        rootPlan = data.Plan;
+      }
+
+      // Flatten nodes for analysis
+      flatNodes = [];
+      if (rootPlan) {
+        flattenTree(rootPlan, null, 0);
+      }
+
+      updateMetrics(rootPlan, planningTime, executionTime);
+      renderTree(rootPlan);
+      renderSummary(rootPlan, planningTime, executionTime);
+      renderRaw();
+    }
+
+    function flattenTree(node, parent, depth) {
+      const flat = {
+        node,
+        parent,
+        depth,
+        cost: node["Total Cost"] || 0,
+        startupCost: node["Startup Cost"] || 0,
+        actualTime: node["Actual Total Time"] || 0,
+        actualStartupTime: node["Actual Startup Time"] || 0,
+        actualRows: node["Actual Rows"] !== undefined ? node["Actual Rows"] * (node["Actual Loops"] || 1) : null,
+        planRows: node["Plan Rows"] || 0,
+        type: node["Node Type"] || "Unknown",
+        relation: node["Relation Name"] || node["Index Name"] || "",
+        exclusiveCost: 0,
+        exclusiveTime: 0
+      };
+
+      let childrenCost = 0;
+      let childrenTime = 0;
+      if (node.Plans) {
+        node.Plans.forEach(child => {
+          childrenCost += child["Total Cost"] || 0;
+          childrenTime += child["Actual Total Time"] || 0;
+        });
+      }
+      flat.exclusiveCost = Math.max(0, flat.cost - childrenCost);
+      flat.exclusiveTime = Math.max(0, flat.actualTime - childrenTime);
+
+      flatNodes.push(flat);
+
+      if (node.Plans) {
+        node.Plans.forEach(child => flattenTree(child, node, depth + 1));
+      }
+    }
+
+    function updateMetrics(rootPlan, planningTime, executionTime) {
+      const totalCost = rootPlan ? rootPlan["Total Cost"] : 0;
+      const actualTotalTime = rootPlan ? rootPlan["Actual Total Time"] : null;
+      const actualRows = rootPlan ? rootPlan["Actual Rows"] : "-";
+
+      document.getElementById("metric-total-cost").textContent = totalCost ? totalCost.toLocaleString() : "-";
+      document.getElementById("metric-total-time").textContent = actualTotalTime !== null ? actualTotalTime.toFixed(3) + " ms" : "-";
+      document.getElementById("metric-planning-time").textContent = planningTime !== null && planningTime !== undefined ? planningTime.toFixed(3) + " ms" : "-";
+      document.getElementById("metric-exec-time").textContent = executionTime !== null && executionTime !== undefined ? executionTime.toFixed(3) + " ms" : (actualTotalTime ? actualTotalTime.toFixed(3) + " ms" : "-");
+      document.getElementById("metric-actual-rows").textContent = actualRows !== null && actualRows !== undefined ? actualRows.toLocaleString() : "-";
+
+      // Peak node
+      if (flatNodes.length > 0) {
+        const peak = [...flatNodes].sort((a, b) => b.exclusiveCost - a.exclusiveCost)[0];
+        document.getElementById("metric-peak-node").textContent = `${peak.type} (${peak.exclusiveCost.toFixed(1)} cost)`;
+      }
+    }
+
+    function renderTree(rootPlan) {
+      const container = document.getElementById("tree-root-container");
+      container.innerHTML = "";
+      if (!rootPlan) {
+        container.innerHTML = `<div style="color:var(--text-muted); padding:3rem; text-align:center;">No visual plan structure available. Switch to Raw Plan to view text output.</div>`;
+        return;
+      }
+
+      const totalCost = rootPlan["Total Cost"] || 1;
+      const treeDom = buildNodeDom(rootPlan, totalCost, true);
+      container.appendChild(treeDom);
+
+      // Select root by default
+      selectNode(rootPlan);
+    }
+
+    function buildNodeDom(node, totalCost, isRoot = false) {
+      const wrapper = document.createElement("div");
+      wrapper.className = `tree-node-wrapper ${isRoot ? "tree-root" : ""}`;
+
+      const card = document.createElement("div");
+      card.className = "node-card";
+      card.onclick = (e) => {
+        e.stopPropagation();
+        selectNode(node, card);
+      };
+
+      const cost = node["Total Cost"] || 0;
+      const costPct = totalCost > 0 ? ((cost / totalCost) * 100).toFixed(1) : 0;
+      const isSeqScan = node["Node Type"] === "Seq Scan";
+      const isSevere = costPct >= 60 || (isSeqScan && cost > 300);
+      const isWarning = costPct >= 30;
+
+      if (isSevere) card.classList.add("bottleneck-severe");
+      else if (isWarning) card.classList.add("bottleneck-warning");
+
+      const relationName = node["Relation Name"] ? `${node["Schema"] ? node["Schema"] + "." : ""}${node["Relation Name"]}` : (node["Index Name"] || "");
+
+      card.innerHTML = `
+        <div class="node-header">
+          <span class="node-type">${escapeHtml(node["Node Type"] || "Node")}</span>
+          <span class="pill ${isSevere ? 'pill-red' : (isWarning ? 'pill-amber' : 'pill-blue')}">${costPct}% cost</span>
+        </div>
+        ${relationName ? `<div class="node-subtext">${escapeHtml(relationName)}</div>` : ''}
+        <div class="cost-bar-container">
+          <div class="cost-bar-fill ${isSevere ? 'red' : (isWarning ? 'amber' : '')}" style="width: ${Math.max(5, costPct)}%"></div>
+        </div>
+        <div class="node-stats-grid">
+          <div class="stat-row">
+            <span class="stat-lbl">Cost:</span>
+            <span class="stat-val">${cost.toFixed(1)}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-lbl">Rows:</span>
+            <span class="stat-val">${node["Actual Rows"] !== undefined ? node["Actual Rows"] : (node["Plan Rows"] || 0)}</span>
+          </div>
+          ${node["Actual Total Time"] !== undefined ? `
+            <div class="stat-row">
+              <span class="stat-lbl">Time:</span>
+              <span class="stat-val">${node["Actual Total Time"].toFixed(2)}ms</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-lbl">Loops:</span>
+              <span class="stat-val">${node["Actual Loops"] || 1}</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      wrapper.appendChild(card);
+
+      if (node.Plans && node.Plans.length > 0) {
+        wrapper.classList.add("has-children");
+        const childrenContainer = document.createElement("div");
+        childrenContainer.className = "children-container";
+        node.Plans.forEach(child => {
+          childrenContainer.appendChild(buildNodeDom(child, totalCost, false));
+        });
+        wrapper.appendChild(childrenContainer);
+      }
+
+      return wrapper;
+    }
+
+    function selectNode(node, cardElement = null) {
+      selectedNode = node;
+      document.querySelectorAll(".node-card.selected").forEach(el => el.classList.remove("selected"));
+      if (cardElement) {
+        cardElement.classList.add("selected");
+      }
+
+      document.getElementById("drawer-node-name").textContent = node["Node Type"] || "Node";
+      const cost = node["Total Cost"] || 0;
+      document.getElementById("drawer-cost-pill").textContent = `Cost: ${cost.toFixed(2)}`;
+
+      const drawerContent = document.getElementById("drawer-content");
+      drawerContent.innerHTML = "";
+
+      // Group properties
+      const groups = [
+        {
+          title: "Execution Metrics",
+          keys: ["Node Type", "Actual Startup Time", "Actual Total Time", "Actual Rows", "Actual Loops", "Startup Cost", "Total Cost", "Plan Rows", "Plan Width"]
+        },
+        {
+          title: "Relation & Scan",
+          keys: ["Relation Name", "Schema", "Alias", "Index Name", "Scan Direction", "Parallel Aware"]
+        },
+        {
+          title: "Filters & Conditions",
+          keys: ["Index Cond", "Hash Cond", "Filter", "Rows Removed by Filter", "Recheck Cond", "Join Type", "Sort Key", "Sort Method"]
+        },
+        {
+          title: "Buffers & I/O",
+          keys: ["Shared Hit Blocks", "Shared Read Blocks", "Shared Dirtied Blocks", "Shared Written Blocks", "Local Hit Blocks", "Local Read Blocks", "Temp Read Blocks", "Temp Written Blocks"]
+        }
+      ];
+
+      groups.forEach(grp => {
+        const rows = [];
+        grp.keys.forEach(k => {
+          if (node[k] !== undefined && node[k] !== null) {
+            let displayVal = node[k];
+            if (Array.isArray(displayVal)) displayVal = displayVal.join(", ");
+            else if (typeof displayVal === "object") displayVal = JSON.stringify(displayVal);
+            rows.push(`<tr><td class="key">${escapeHtml(k)}</td><td class="val">${escapeHtml(displayVal)}</td></tr>`);
+          }
+        });
+
+        if (rows.length > 0) {
+          const div = document.createElement("div");
+          div.className = "prop-group";
+          div.innerHTML = `
+            <div class="prop-group-title">${escapeHtml(grp.title)}</div>
+            <table class="prop-table"><tbody>${rows.join("")}</tbody></table>
+          `;
+          drawerContent.appendChild(div);
+        }
+      });
+    }
+
+    function renderSummary(rootPlan, planningTime, executionTime) {
+      const alertsContainer = document.getElementById("bottlenecks-list");
+      alertsContainer.innerHTML = "";
+      const alerts = [];
+
+      flatNodes.forEach(item => {
+        const node = item.node;
+        // 1. Sequential Scan on large table
+        if (node["Node Type"] === "Seq Scan" && (node["Plan Rows"] > 1000 || (node["Actual Rows"] && node["Actual Rows"] > 1000))) {
+          alerts.push({
+            type: "danger",
+            title: `Sequential Scan on ${escapeHtml(node["Relation Name"] || "table")}`,
+            desc: `Full table scan processed ${node["Actual Rows"] || node["Plan Rows"]} rows with total cost ${node["Total Cost"]}. Consider adding an index on filter columns: ${escapeHtml(node["Filter"] || "none")}.`
+          });
+        }
+
+        // 2. High Rows Removed by Filter
+        if (node["Rows Removed by Filter"] && node["Rows Removed by Filter"] > 2000) {
+          alerts.push({
+            type: "warning",
+            title: `High Rows Discarded (${node["Rows Removed by Filter"].toLocaleString()} rows) in ${escapeHtml(node["Node Type"] || "Node")}`,
+            desc: `The database retrieved rows and filtered them in-memory. An index covering '${escapeHtml(node["Filter"] || "")}' could avoid scanning non-matching rows.`
+          });
+        }
+
+        // 3. Row estimation mismatch (>5x)
+        if (node["Actual Rows"] !== undefined && node["Plan Rows"] > 0) {
+          const act = node["Actual Rows"] * (node["Actual Loops"] || 1);
+          const est = node["Plan Rows"];
+          const ratio = act > 0 ? est / act : 1;
+          if (ratio > 8 || ratio < 0.12) {
+            alerts.push({
+              type: "warning",
+              title: `Row Estimate Mismatch in ${escapeHtml(node["Node Type"] || "Node")}`,
+              desc: `Planner estimated ${est.toLocaleString()} rows but observed ${act.toLocaleString()} rows (${(act / est).toFixed(1)}x difference). Run ANALYZE on this table to update statistics.`
+            });
+          }
+        }
+      });
+
+      if (alerts.length === 0) {
+        alertsContainer.innerHTML = `
+          <div class="alert-item alert-info">
+            <div class="alert-body">
+              <strong>Query Execution Looks Healthy</strong>
+              No sequential scan bottlenecks, severe estimation inaccuracies, or large filter drops detected.
+            </div>
+          </div>
+        `;
+      } else {
+        alerts.forEach(al => {
+          const el = document.createElement("div");
+          el.className = `alert-item alert-${al.type}`;
+          el.innerHTML = `
+            <div class="alert-body">
+              <strong>${al.title}</strong>
+              ${al.desc}
+            </div>
+          `;
+          alertsContainer.appendChild(el);
+        });
+      }
+
+      // Breakdown stats
+      const breakdownEl = document.getElementById("execution-breakdown");
+      const totalCost = rootPlan ? rootPlan["Total Cost"] : 0;
+      const scans = flatNodes.filter(n => n.type.includes("Scan"));
+      const joins = flatNodes.filter(n => n.type.includes("Join") || n.type === "Hash");
+
+      breakdownEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border-subtle)">
+          <span style="color:var(--text-secondary)">Total Plan Nodes:</span>
+          <span style="color:var(--text); font-weight:600">${flatNodes.length}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border-subtle)">
+          <span style="color:var(--text-secondary)">Scan Operations:</span>
+          <span style="color:var(--text); font-weight:600">${scans.length} (${scans.map(s => escapeHtml(s.type)).join(", ") || 'none'})</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border-subtle)">
+          <span style="color:var(--text-secondary)">Join / Hash Nodes:</span>
+          <span style="color:var(--text); font-weight:600">${joins.length}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:0.35rem 0;">
+          <span style="color:var(--text-secondary)">Planning vs Execution:</span>
+          <span style="color:var(--text); font-weight:600">${planningTime ? planningTime.toFixed(2) + "ms" : "-"} / ${executionTime ? executionTime.toFixed(2) + "ms" : "-"}</span>
+        </div>
+      `;
+
+      // Top expensive operations table
+      const tbody = document.querySelector("#top-nodes-table tbody");
+      tbody.innerHTML = "";
+      const sortedNodes = [...flatNodes].sort((a, b) => b.cost - a.cost).slice(0, 7);
+
+      sortedNodes.forEach(item => {
+        const tr = document.createElement("tr");
+        const costPct = totalCost > 0 ? ((item.cost / totalCost) * 100).toFixed(1) : "0";
+        const estRatio = item.actualRows !== null && item.planRows > 0 ? (item.actualRows / item.planRows).toFixed(2) + "x" : "-";
+
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(item.type)}</strong></td>
+          <td style="color:var(--accent)">${escapeHtml(item.relation || item.node["Filter"] || "-")}</td>
+          <td>${item.actualTime ? item.actualTime.toFixed(2) + " ms" : "-"}</td>
+          <td>${item.cost.toFixed(1)}</td>
+          <td>${item.actualRows !== null ? item.actualRows.toLocaleString() : "-"} / ${item.planRows.toLocaleString()}</td>
+          <td><span class="pill ${estRatio.startsWith('0.') || parseFloat(estRatio) > 5 ? 'pill-amber' : 'pill-emerald'}">${estRatio}</span></td>
+          <td><strong>${costPct}%</strong></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderRaw() {
+      const container = document.getElementById("raw-content");
+      if (rawFormatMode === "json") {
+        const obj = currentPlanData?.plan_json || currentPlanData;
+        container.textContent = JSON.stringify(obj, null, 2);
+      } else {
+        container.textContent = currentPlanData?.plan || "No plain text explain format available.";
+      }
+    }
+
+    function setRawFormat(mode) {
+      rawFormatMode = mode;
+      renderRaw();
+    }
+
+    function switchView(viewName) {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".view-panel").forEach(p => p.classList.remove("active"));
+
+      const targetTab = Array.from(document.querySelectorAll(".tab-btn")).find(b => b.getAttribute("onclick")?.includes(viewName));
+      if (targetTab) targetTab.classList.add("active");
+
+      const panel = document.getElementById(`view-${viewName}`);
+      if (panel) panel.classList.add("active");
+    }
+
+    function fitView() {
+      const canvas = document.getElementById("tree-canvas");
+      canvas.scrollTo({ top: 0, left: (canvas.scrollWidth - canvas.clientWidth) / 2, behavior: "smooth" });
+    }
+
+    function copyCurrentPlan() {
+      const textToCopy = rawFormatMode === "json"
+        ? JSON.stringify(currentPlanData?.plan_json || currentPlanData, null, 2)
+        : (currentPlanData?.plan || JSON.stringify(currentPlanData, null, 2));
+
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = document.getElementById("btn-copy");
+        const orig = btn.innerHTML;
+        btn.innerHTML = `<span style="color:var(--emerald)">Copied!</span>`;
+        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+      });
+    }
+  </script>
+</body>
+</html>

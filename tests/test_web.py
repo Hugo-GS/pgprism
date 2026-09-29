@@ -19,16 +19,23 @@ def test_index_page_loads(test_client: TestClient):
     assert "MCP PostgreSQL" in response.text
     assert "/static/style.css" in response.text
     assert "/static/app.js" in response.text
+    assert "Connection Guide" in response.text
+    assert "MCP Reference" in response.text
+    assert "Strict Read-Only Defense in Depth" in response.text
 
 
 def test_static_assets_serve(test_client: TestClient):
     css_res = test_client.get("/static/style.css")
     assert css_res.status_code == 200
     assert "--bg:" in css_res.text
+    assert ".nav-tabs" in css_res.text
 
     js_res = test_client.get("/static/app.js")
     assert js_res.status_code == 200
     assert "loadProfiles" in js_res.text
+    assert "switchTab" in js_res.text
+    assert "copySnippet" in js_res.text
+
 
 
 def test_create_and_list_profiles_api(test_client: TestClient):
@@ -98,4 +105,100 @@ def test_create_profile_without_database_defaults_to_postgres(test_client: TestC
     res = test_client.post("/api/profiles", json=payload)
     assert res.status_code == 201
     assert res.json()["database"] == "postgres"
+
+
+def test_create_profile_with_custom_timeout(test_client: TestClient):
+    """Test that profiles can be created with a custom statement timeout."""
+    response = test_client.post("/api/profiles", json={
+        "name": "timeout-test",
+        "host": "localhost",
+        "port": 5432,
+        "database": "testdb",
+        "username": "user",
+        "password": "pass",
+        "statement_timeout_ms": 60000,
+    })
+    assert response.status_code == 201
+    data = response.json()
+    assert data["statement_timeout_ms"] == 60000
+
+
+def test_get_info_endpoint(test_client: TestClient):
+    """Test that /api/info returns project environment details."""
+    response = test_client.get("/api/info")
+    assert response.status_code == 200
+    data = response.json()
+    assert "project_root" in data
+    assert "python_executable" in data
+    assert "cli_command" in data
+    assert data["server_module"] == "src.server"
+    assert data["active_profile"] is None
+
+
+def test_get_info_with_active_profile(test_client: TestClient):
+    """Test that /api/info returns active profile information when configured."""
+    test_client.post("/api/profiles", json={
+        "name": "prod-read",
+        "host": "db.internal",
+        "port": 5432,
+        "database": "analytics",
+        "username": "readonly_user",
+    })
+    response = test_client.get("/api/info")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["active_profile"] == "prod-read"
+    assert data["active_database"] == "analytics"
+
+
+def test_search_profiles_api(test_client: TestClient):
+    """Test searching profiles via /api/profiles?q=..."""
+    test_client.post("/api/profiles", json={
+        "name": "finance-dw", "host": "fin.internal", "database": "ledger", "username": "pg"
+    })
+    test_client.post("/api/profiles", json={
+        "name": "marketing-dw", "host": "mkt.internal", "database": "leads", "username": "pg"
+    })
+
+    # Search by q=dw
+    res = test_client.get("/api/profiles?q=dw")
+    assert res.status_code == 200
+    items = res.json()
+    assert len(items) == 2
+
+    # Search by q=ledger
+    res = test_client.get("/api/profiles?q=ledger")
+    assert res.status_code == 200
+    items = res.json()
+    assert len(items) == 1
+    assert items[0]["name"] == "finance-dw"
+
+    # Search with no match
+    res = test_client.get("/api/profiles?q=nonexistent")
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_ui_explain_viewer_endpoint(test_client: TestClient):
+    """Test that /ui/explain-viewer serves the self-contained execution plan component."""
+    response = test_client.get("/ui/explain-viewer")
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "<!DOCTYPE html>" in response.text
+    assert "PostgreSQL Execution Plan" in response.text
+    assert "postMessage" in response.text
+
+
+def test_ui_data_grid_endpoint(test_client: TestClient):
+    """Test that /ui/data-grid serves the self-contained data grid component."""
+    response = test_client.get("/ui/data-grid")
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "<!DOCTYPE html>" in response.text
+    assert "Query Results" in response.text
+    assert "postMessage" in response.text
+
+
+
+
 

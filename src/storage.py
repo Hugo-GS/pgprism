@@ -1,32 +1,56 @@
-"""Local SQLite storage for PostgreSQL connection profiles."""
-
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 from typing import Any, List, Optional
-from pydantic import BaseModel, Field
+from urllib.parse import parse_qs, urlparse
+
+from pydantic import BaseModel, Field, field_validator
 
 
-import os
+def _has_profiles(db_path: Path) -> bool:
+    if not db_path.is_file():
+        return False
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM profiles")
+            row = cur.fetchone()
+            return bool(row and row[0] > 0)
+    except sqlite3.Error:
+        return False
+
 
 def get_default_db_path() -> Path:
-    """Returns the database path, respecting MCP_POSTGRES_DB_PATH or falling back to ~/.config or local .data."""
+    """Resolve the SQLite profiles database path with multi-location fallback."""
     if "MCP_POSTGRES_DB_PATH" in os.environ:
         path = Path(os.environ["MCP_POSTGRES_DB_PATH"])
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
-    config_dir = Path.home() / ".config" / "mcp-postgresql"
+    config_path = Path.home() / ".config" / "mcp-postgresql" / "profiles.db"
+    local_path = Path.cwd() / ".data" / "profiles.db"
+
+    if _has_profiles(config_path):
+        return config_path
+
+    if _has_profiles(local_path):
+        return local_path
+
     try:
-        config_dir.mkdir(parents=True, exist_ok=True)
-        return config_dir / "profiles.db"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        return config_path
     except OSError:
-        local_dir = Path.cwd() / ".data"
-        local_dir.mkdir(parents=True, exist_ok=True)
-        return local_dir / "profiles.db"
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        return local_path
 
 
-from pydantic import BaseModel, Field, field_validator
+def _safe_port(raw: str) -> int:
+    try:
+        port = int(raw)
+    except (ValueError, TypeError):
+        return 5432
+    return port if 1 <= port <= 65535 else 5432
 
 
 class ProfileCreate(BaseModel):
@@ -37,6 +61,7 @@ class ProfileCreate(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(default="")
     sslmode: str = Field(default="prefer")
+    statement_timeout_ms: int = Field(default=30000, ge=1000, le=300000)
 
     @field_validator("database", mode="before")
     @classmethod
@@ -89,9 +114,15 @@ class ProfileStorage:
                 );
                 """
             )
+            try:
+                conn.execute("ALTER TABLE profiles ADD COLUMN statement_timeout_ms INTEGER NOT NULL DEFAULT 30000")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
 
     def _row_to_profile(self, row: sqlite3.Row) -> Profile:
+        keys = row.keys()
+        timeout = row["statement_timeout_ms"] if "statement_timeout_ms" in keys else 30000
         return Profile(
             id=row["id"],
             name=row["name"],
@@ -101,6 +132,7 @@ class ProfileStorage:
             username=row["username"],
             password=row["password"],
             sslmode=row["sslmode"],
+            statement_timeout_ms=timeout,
             is_active=bool(row["is_active"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -127,12 +159,85 @@ class ProfileStorage:
             ).fetchone()
             return self._row_to_profile(row) if row else None
 
+    def search_profiles(self, query: str) -> List[Profile]:
+        """Search profiles by partial match on name, host, or database."""
+        cleaned = query.strip()
+        if not cleaned:
+            return []
+        pattern = f"%{cleaned}%"
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM profiles
+                WHERE name LIKE ? OR host LIKE ? OR database LIKE ?
+                ORDER BY is_active DESC, name ASC
+                """,
+                (pattern, pattern, pattern),
+            ).fetchall()
+            return [self._row_to_profile(r) for r in rows]
+
+    def _profile_from_env(self) -> Optional[Profile]:
+        """Build a profile from DATABASE_URL or PG* environment variables."""
+        database_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+        now = datetime.now(timezone.utc).isoformat()
+        if database_url:
+            parsed = urlparse(database_url)
+            username = parsed.username or os.environ.get("PGUSER", "postgres")
+            password = parsed.password or os.environ.get("PGPASSWORD", "")
+            host = parsed.hostname or os.environ.get("PGHOST", "localhost")
+            port = parsed.port or _safe_port(os.environ.get("PGPORT", "5432"))
+            db_path = parsed.path.lstrip("/") if parsed.path else ""
+            database = db_path if db_path else os.environ.get("PGDATABASE", "postgres")
+            query_params = parse_qs(parsed.query)
+            sslmode = query_params.get("sslmode", [os.environ.get("PGSSLMODE", "prefer")])[0]
+            return Profile(
+                id=0,
+                name="env-default",
+                host=host,
+                port=port,
+                database=database or "postgres",
+                username=username,
+                password=password,
+                sslmode=sslmode,
+                statement_timeout_ms=30000,
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+
+        if any(k in os.environ for k in ("PGHOST", "PGDATABASE", "PGUSER")):
+            return Profile(
+                id=0,
+                name="env-default",
+                host=os.environ.get("PGHOST", "localhost"),
+                port=_safe_port(os.environ.get("PGPORT", "5432")),
+                database=os.environ.get("PGDATABASE", "postgres"),
+                username=os.environ.get("PGUSER", "postgres"),
+                password=os.environ.get("PGPASSWORD", ""),
+                sslmode=os.environ.get("PGSSLMODE", "prefer"),
+                statement_timeout_ms=30000,
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+        return None
+
     def get_active_profile(self) -> Optional[Profile]:
         with self._get_connection() as conn:
             row = conn.execute(
                 "SELECT * FROM profiles WHERE is_active = 1 LIMIT 1"
             ).fetchone()
-            return self._row_to_profile(row) if row else None
+            if row:
+                return self._row_to_profile(row)
+
+            # No explicitly active profile — fall back to first stored
+            fallback_row = conn.execute(
+                "SELECT * FROM profiles ORDER BY id ASC LIMIT 1"
+            ).fetchone()
+            if fallback_row:
+                return self._row_to_profile(fallback_row)
+
+        return self._profile_from_env()
 
     def save_profile(self, profile: ProfileCreate) -> Profile:
         now = datetime.now(timezone.utc).isoformat()
@@ -143,8 +248,8 @@ class ProfileStorage:
 
             cursor = conn.execute(
                 """
-                INSERT INTO profiles (name, host, port, database, username, password, sslmode, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO profiles (name, host, port, database, username, password, sslmode, statement_timeout_ms, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     profile.name,
@@ -154,6 +259,7 @@ class ProfileStorage:
                     profile.username,
                     profile.password,
                     profile.sslmode,
+                    profile.statement_timeout_ms,
                     is_active,
                     now,
                     now,
@@ -170,7 +276,7 @@ class ProfileStorage:
             conn.execute(
                 """
                 UPDATE profiles
-                SET name = ?, host = ?, port = ?, database = ?, username = ?, password = ?, sslmode = ?, updated_at = ?
+                SET name = ?, host = ?, port = ?, database = ?, username = ?, password = ?, sslmode = ?, statement_timeout_ms = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -181,6 +287,7 @@ class ProfileStorage:
                     profile.username,
                     profile.password,
                     profile.sslmode,
+                    profile.statement_timeout_ms,
                     now,
                     profile_id,
                 ),
