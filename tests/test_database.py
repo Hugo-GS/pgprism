@@ -61,7 +61,7 @@ def test_execute_query_formats_results(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         result = db.execute_query("SELECT id, username FROM users", max_rows=10)
 
         # Ensure the transaction uses the current psycopg API and is explicitly read-only.
@@ -94,7 +94,7 @@ def test_execute_query_truncation(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         result = db.execute_query("SELECT id FROM users", max_rows=2)
         assert result["row_count"] == 2
         assert result["truncated"] is True
@@ -117,7 +117,7 @@ def test_list_tables(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         tables = db.list_tables(schema="public")
         assert len(tables) == 2
         assert tables[0] == {"table_name": "users", "table_type": "BASE TABLE"}
@@ -141,7 +141,7 @@ def test_describe_table(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         desc = db.describe_table("users", schema="public")
         assert desc["table"] == "users"
         assert len(desc["columns"]) == 2
@@ -166,7 +166,7 @@ def test_explain_query(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         plan = db.explain_query("SELECT * FROM users")
         assert "Seq Scan on users" in plan
 
@@ -185,7 +185,7 @@ def test_explain_query_json_raw_string(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         plan = db.explain_query("SELECT * FROM users", analyze=True, as_json=True)
         mock_cursor.execute.assert_called_with("EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS) SELECT * FROM users")
         assert isinstance(plan, list)
@@ -208,20 +208,17 @@ def test_explain_query_json_preparsed_object(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         plan = db.explain_query("SELECT * FROM users WHERE id = 1", analyze=False, as_json=True)
         mock_cursor.execute.assert_called_with("EXPLAIN (FORMAT JSON) SELECT * FROM users WHERE id = 1")
         assert plan == parsed_obj
-
 
 
 def test_list_databases(sample_profile: Profile):
     db = DatabaseManager(sample_profile)
 
     mock_cursor = MagicMock()
-    mock_cursor.description = [MagicMock(name="datname")]
-    mock_cursor.description[0].name = "datname"
-    mock_cursor.fetchmany.return_value = [("postgres",), ("analytics",), ("ecommerce",)]
+    mock_cursor.fetchall.return_value = [("postgres",), ("analytics",), ("ecommerce",)]
 
     mock_conn = MagicMock()
     mock_conn.__enter__.return_value = mock_conn
@@ -230,7 +227,7 @@ def test_list_databases(sample_profile: Profile):
 
     mock_pool = MagicMock()
     mock_pool.connection.return_value = mock_conn
-    with patch.object(db, "_get_pool", return_value=mock_pool):
+    with patch.object(db._pool, "get_pool", return_value=mock_pool):
         dbs = db.list_databases()
         assert dbs == ["postgres", "analytics", "ecommerce"]
 
@@ -247,22 +244,24 @@ def test_set_database(sample_profile: Profile):
         db.set_database("")
 
 
-from src.database import _pool_key, _pool_cache
+from src.database.pool import PoolManager
+
 
 def test_pool_key(sample_profile: Profile):
-    key1 = _pool_key(sample_profile, "db1")
-    key2 = _pool_key(sample_profile, "db2")
-    assert key1 == "localhost:5432/db1/test_user/prefer"
-    assert key2 == "localhost:5432/db2/test_user/prefer"
+    key1 = PoolManager._pool_key(sample_profile, "db1")
+    key2 = PoolManager._pool_key(sample_profile, "db2")
+    # Keys now include a password+timeout hash suffix
+    assert key1.startswith("localhost:5432/db1/test_user/prefer/")
+    assert key2.startswith("localhost:5432/db2/test_user/prefer/")
     assert key1 != key2
 
 
 def test_get_pool_instantiates_connection_pool(sample_profile: Profile):
     db = DatabaseManager(sample_profile)
     try:
-        with patch("src.database.ConnectionPool") as mock_cp:
+        with patch("src.database.pool.ConnectionPool") as mock_cp:
             mock_cp.return_value = MagicMock()
-            pool = db._get_pool("custom_test_db")
+            pool = db._pool.get_pool("custom_test_db")
             assert pool == mock_cp.return_value
             mock_cp.assert_called_once()
             args, kwargs = mock_cp.call_args
@@ -270,7 +269,7 @@ def test_get_pool_instantiates_connection_pool(sample_profile: Profile):
             assert kwargs["min_size"] == 1
             assert kwargs["max_size"] == 3
     finally:
-        _pool_cache.clear()
+        PoolManager._cache.clear()
 
 
 def test_serialize_value_handles_nan_and_infinity():
