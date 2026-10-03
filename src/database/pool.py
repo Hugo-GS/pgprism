@@ -109,7 +109,7 @@ class PoolManager:
                 _, evicted = self._cache.popitem(last=False)
                 to_close.append(evicted)
 
-        # Closing waits for in-flight connections, so never hold the lock here.
+        # close() may block up to 5s joining pool workers, so never hold the lock here.
         _close_quietly(to_close)
         return pool
 
