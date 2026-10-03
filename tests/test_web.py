@@ -202,3 +202,13 @@ def test_ui_data_grid_endpoint(test_client: TestClient):
 
 
 
+
+
+def test_lifespan_closes_pools_on_shutdown(tmp_path: Path):
+    from unittest.mock import patch
+
+    app = create_app(storage=ProfileStorage(db_path=tmp_path / "lifespan.db"))
+    with patch("src.web.close_all_pools") as mock_close:
+        with TestClient(app):
+            mock_close.assert_not_called()
+        mock_close.assert_called_once()

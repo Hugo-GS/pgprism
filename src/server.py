@@ -15,7 +15,7 @@ READONLY_ANNOTATIONS = ToolAnnotations(
     idempotent_hint=True,
     open_world_hint=False,
 )
-from src.database import DatabaseManager
+from src.database import DatabaseManager, close_all_pools
 from src.security import SecurityError
 from src.storage import ProfileStorage
 
@@ -430,7 +430,10 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
 def main() -> None:
     """Entrypoint for running the MCP server over stdio."""
     server = create_server()
-    server.run(transport="stdio")
+    try:
+        server.run(transport="stdio")
+    finally:
+        close_all_pools()
 
 
 if __name__ == "__main__":

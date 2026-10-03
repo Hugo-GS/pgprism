@@ -424,3 +424,15 @@ async def test_explain_query_analyze_single_execution(storage_with_profile: Prof
 
 
 
+
+
+def test_main_closes_pools_even_when_run_raises():
+    from src.server import main
+
+    with patch("src.server.create_server") as mock_create, \
+            patch("src.server.close_all_pools") as mock_close:
+        mock_create.return_value.run.side_effect = RuntimeError("boom")
+        with pytest.raises(RuntimeError):
+            main()
+    mock_create.return_value.run.assert_called_once_with(transport="stdio")
+    mock_close.assert_called_once()

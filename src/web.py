@@ -1,23 +1,33 @@
 """Local Web Configuration UI for PostgreSQL MCP Server."""
 
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from src.database import DatabaseManager
+from src.database import DatabaseManager, close_all_pools
 from src.storage import Profile, ProfileCreate, ProfileStorage
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_DIR / "index.html"
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Releases database connections when the web server stops."""
+    try:
+        yield
+    finally:
+        close_all_pools()
+
+
 def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
     """Creates the FastAPI configuration app."""
     store = storage if storage is not None else ProfileStorage()
-    app = FastAPI(title="MCP PostgreSQL Configuration")
+    app = FastAPI(title="MCP PostgreSQL Configuration", lifespan=lifespan)
 
     # Mount static assets (CSS, JS, etc.)
     if STATIC_DIR.exists():
