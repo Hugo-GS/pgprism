@@ -244,7 +244,23 @@ def test_set_database(sample_profile: Profile):
         db.set_database("")
 
 
-from src.database.pool import PoolManager
+from psycopg_pool import PoolClosed
+
+from src.database.pool import MAX_POOLS, PoolManager
+
+
+@pytest.fixture
+def clean_pool_cache():
+    PoolManager._cache.clear()
+    yield
+    PoolManager._cache.clear()
+
+
+@pytest.fixture
+def mock_connection_pool():
+    # A fresh MagicMock per ConnectionPool(...) call so pools are distinguishable.
+    with patch("src.database.pool.ConnectionPool", side_effect=lambda *a, **k: MagicMock()) as mock_cp:
+        yield mock_cp
 
 
 def test_pool_key(sample_profile: Profile):
@@ -256,20 +272,96 @@ def test_pool_key(sample_profile: Profile):
     assert key1 != key2
 
 
-def test_get_pool_instantiates_connection_pool(sample_profile: Profile):
+def test_get_pool_instantiates_connection_pool(sample_profile: Profile, clean_pool_cache):
     db = DatabaseManager(sample_profile)
-    try:
-        with patch("src.database.pool.ConnectionPool") as mock_cp:
-            mock_cp.return_value = MagicMock()
-            pool = db._pool.get_pool("custom_test_db")
-            assert pool == mock_cp.return_value
-            mock_cp.assert_called_once()
-            args, kwargs = mock_cp.call_args
-            assert "dbname=custom_test_db" in args[0]
-            assert kwargs["min_size"] == 1
-            assert kwargs["max_size"] == 3
-    finally:
-        PoolManager._cache.clear()
+    with patch("src.database.pool.ConnectionPool") as mock_cp:
+        mock_cp.return_value = MagicMock()
+        pool = db._pool.get_pool("custom_test_db")
+        assert pool == mock_cp.return_value
+        mock_cp.assert_called_once()
+        args, kwargs = mock_cp.call_args
+        assert "dbname=custom_test_db" in args[0]
+        assert kwargs["min_size"] == 0
+        assert kwargs["max_size"] == 3
+        assert kwargs["max_idle"] == 60.0
+        assert kwargs["kwargs"]["application_name"] == "mcp-postgresql"
+
+
+def test_get_pool_reuses_cached_pool(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+    manager = PoolManager(sample_profile)
+    first = manager.get_pool("db1")
+    second = manager.get_pool("db1")
+    assert first is second
+    assert mock_connection_pool.call_count == 1
+
+
+def test_get_pool_lru_evicts_and_closes_oldest(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+    manager = PoolManager(sample_profile)
+    pools = [manager.get_pool(f"db{i}") for i in range(MAX_POOLS + 1)]
+    assert len(PoolManager._cache) == MAX_POOLS
+    pools[0].close.assert_called_once()
+    for pool in pools[1:]:
+        pool.close.assert_not_called()
+
+
+def test_get_pool_lru_touch_protects_recent(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+    manager = PoolManager(sample_profile)
+    pools = [manager.get_pool(f"db{i}") for i in range(MAX_POOLS)]
+    # Touch the oldest so db1 becomes the least recently used.
+    assert manager.get_pool("db0") is pools[0]
+    manager.get_pool("db_new")
+    pools[0].close.assert_not_called()
+    pools[1].close.assert_called_once()
+
+
+def test_get_pool_credential_change_closes_stale_pool(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+    old_pool = PoolManager(sample_profile).get_pool("db1")
+    changed = sample_profile.model_copy(update={"password": "rotated"})
+    new_pool = PoolManager(changed).get_pool("db1")
+    assert new_pool is not old_pool
+    old_pool.close.assert_called_once()
+    assert len(PoolManager._cache) == 1
+
+
+def test_close_all_closes_every_pool_and_clears_cache(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+    manager = PoolManager(sample_profile)
+    pools = [manager.get_pool("db1"), manager.get_pool("db2")]
+    PoolManager.close_all()
+    for pool in pools:
+        pool.close.assert_called_once()
+    assert len(PoolManager._cache) == 0
+
+
+def test_connect_retries_once_on_pool_closed(sample_profile: Profile):
+    manager = PoolManager(sample_profile)
+    closed_pool = MagicMock()
+    closed_pool.connection.return_value.__enter__.side_effect = PoolClosed("closed")
+    fresh_conn = MagicMock()
+    fresh_pool = MagicMock()
+    fresh_pool.connection.return_value.__enter__.return_value = fresh_conn
+    with patch.object(manager, "get_pool", side_effect=[closed_pool, fresh_pool]) as mock_get_pool:
+        with manager.connect() as conn:
+            assert conn is fresh_conn
+    assert mock_get_pool.call_count == 2
+    fresh_conn.transaction.assert_called_once()
+
+
+def test_test_connection_uses_unpooled_connection(sample_profile: Profile, clean_pool_cache):
+    manager = PoolManager(sample_profile)
+    mock_conn = MagicMock()
+    mock_conn.__enter__.return_value = mock_conn
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.fetchone.return_value = ("PostgreSQL 16.0",)
+    with patch("src.database.pool.psycopg.connect", return_value=mock_conn) as mock_connect, \
+            patch("src.database.pool.ConnectionPool") as mock_cp:
+        ok, version = manager.test_connection(timeout=3.0)
+    assert ok is True
+    assert version == "PostgreSQL 16.0"
+    mock_cp.assert_not_called()
+    _, kwargs = mock_connect.call_args
+    assert kwargs["connect_timeout"] == 3
+    assert kwargs["application_name"] == "mcp-postgresql"
+    assert len(PoolManager._cache) == 0
 
 
 def test_serialize_value_handles_nan_and_infinity():
