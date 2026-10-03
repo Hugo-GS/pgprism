@@ -33,9 +33,14 @@ Single-pr, estimated ~600 authored changed lines (additions from new package str
 
 ## Tasks
 
-- [ ] T1: Create `src/database/` package — types.py, pool.py, introspection.py, diagnostics.py, manager.py, __init__.py — and delete old `src/database.py`
-- [ ] T2: Update `tests/test_database.py` — fix import paths and mock targets
-- [ ] T3: Verify — run full test suite, import checks, confirm no regressions
+- [x] T1: Create `src/database/` package — types.py, pool.py, introspection.py, diagnostics.py, manager.py, __init__.py — and delete old `src/database.py`
+- [x] T2: Update `tests/test_database.py` — fix import paths and mock targets
+- [x] T3: Verify — run full test suite, import checks, confirm no regressions
+
+## Evidence
+- Commit: `ba7a64c` on `feat/mcp-postgresql-server`
+- 9 files changed, 725 insertions, 535 deletions
+- 102 tests passed (1.71s)
 
 ## Acceptance Criteria
 - `python -m pytest tests/ -v` — all 14 tests pass
