@@ -173,3 +173,5 @@ Run all unit tests:
 ```bash
 .venv/bin/pytest -v
 ```
+
+Web storage is initialized during ASGI startup, not module import. Use `with TestClient(app)` in web tests. SQLite operations finalize transactions before closing connections, including failure paths.

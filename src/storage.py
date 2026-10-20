@@ -1,8 +1,9 @@
 import os
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any, Iterator, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,7 +13,7 @@ def _has_profiles(db_path: Path) -> bool:
     if not db_path.is_file():
         return False
     try:
-        with sqlite3.connect(db_path) as conn:
+        with closing(sqlite3.connect(db_path)) as conn, conn:
             cur = conn.cursor()
             cur.execute("SELECT count(*) FROM profiles")
             row = cur.fetchone()
@@ -99,10 +100,12 @@ class ProfileStorage:
 
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    @contextmanager
+    def _get_connection(self) -> Iterator[sqlite3.Connection]:
+        """Finalize the transaction before closing its connection."""
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+            conn.row_factory = sqlite3.Row
+            yield conn
 
     def _init_db(self) -> None:
         with self._get_connection() as conn:

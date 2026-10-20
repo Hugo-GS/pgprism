@@ -1,4 +1,9 @@
+import os
 from pathlib import Path
+import subprocess
+import sys
+from unittest.mock import patch
+
 import pytest
 from starlette.testclient import TestClient
 from src.storage import ProfileStorage
@@ -10,7 +15,8 @@ def test_client(tmp_path: Path) -> TestClient:
     db_path = tmp_path / "web_profiles.db"
     storage = ProfileStorage(db_path=db_path)
     app = create_app(storage=storage)
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 def test_index_page_loads(test_client: TestClient):
@@ -204,11 +210,59 @@ def test_ui_data_grid_endpoint(test_client: TestClient):
 
 
 
-def test_lifespan_closes_pools_on_shutdown(tmp_path: Path):
-    from unittest.mock import patch
+def test_import_does_not_initialize_profile_storage(tmp_path: Path):
+    db_path = tmp_path / "import.db"
+    script = """
+from unittest.mock import patch
 
-    app = create_app(storage=ProfileStorage(db_path=tmp_path / "lifespan.db"))
-    with patch("src.web.close_all_pools") as mock_close:
-        with TestClient(app):
+with patch("src.storage.ProfileStorage", side_effect=AssertionError("storage opened during import")) as constructor, \
+     patch("sqlite3.connect", side_effect=AssertionError("SQLite opened during import")), \
+     patch("keyring.get_keyring", side_effect=AssertionError("keyring accessed during import")):
+    import src.web
+    constructor.assert_not_called()
+    src.web.create_app()
+    constructor.assert_not_called()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env={**os.environ, "PGPRISM_DB_PATH": str(db_path)},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+    assert not db_path.exists()
+
+
+def test_lifespan_closes_pools_on_shutdown(tmp_path: Path):
+    db_path = tmp_path / "lifespan.db"
+    with patch("src.web.ProfileStorage", side_effect=lambda: ProfileStorage(db_path=db_path)) as constructor, \
+         patch("src.web.close_all_pools") as mock_close:
+        app = create_app()
+        constructor.assert_not_called()
+        assert not db_path.exists()
+        with TestClient(app) as client:
+            constructor.assert_called_once_with()
+            assert db_path.is_file()
             mock_close.assert_not_called()
-        mock_close.assert_called_once()
+            created = client.post("/api/profiles", json={"name": "startup", "username": "reader"})
+            assert created.status_code == 201
+            assert client.get("/api/profiles").json() == [created.json()]
+            assert client.get("/api/info").json()["active_profile"] == "startup"
+            constructor.assert_called_once_with()
+        mock_close.assert_called_once_with()
+
+
+def test_lifespan_uses_injected_storage_without_constructing_another(tmp_path: Path):
+    storage = ProfileStorage(db_path=tmp_path / "injected.db")
+    with patch("src.web.ProfileStorage", side_effect=AssertionError("unexpected default storage")) as constructor:
+        app = create_app(storage=storage)
+        constructor.assert_not_called()
+        with TestClient(app) as client:
+            created = client.post("/api/profiles", json={"name": "injected", "username": "reader"})
+            assert created.status_code == 201
+            assert client.get("/api/profiles").json() == [created.json()]
+            assert storage.get_active_profile().name == "injected"
+        constructor.assert_not_called()
