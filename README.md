@@ -12,7 +12,7 @@
   - **AST Layer**: Uses `sqlglot` to parse and validate queries before execution, rejecting any mutations (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `MERGE`), write CTEs, `SELECT INTO`, row locks (`FOR UPDATE`), or dangerous administrative functions.
   - **Session Layer**: Enforces `SET default_transaction_read_only = on` and runs all queries inside explicit read-only transactions at the PostgreSQL engine level.
 - **Bounded Connection Pooling**: Self-draining LRU pool cache that prevents connection leaks and bounds resource usage per process.
-- **Local SQLite Profile Storage**: Store and switch database credentials locally without cloud tokens or external dependencies.
+- **Local Profile Storage**: SQLite holds connection metadata; passwords live in the operating system's secret store through `keyring`, with no plaintext fallback.
 - **Web Configuration UI**: A clean, local web dashboard to manage profiles, test connectivity, and inspect documentation.
 - **Interactive MCP UI (MCP Apps)**: Built-in visual in-chat components for execution plan exploration (`explain_query`) and tabular data inspection (`read_query`) following the official `@modelcontextprotocol/ext-apps` standard.
 - **Pragmatic Modular Architecture**: Zero enterprise boilerplate or unnecessary abstract classes.
@@ -30,7 +30,8 @@ src/
 │   ├── introspection.py# Database, schema, table, index, and constraint discovery
 │   ├── diagnostics.py  # Query inspection, stats, and database size telemetry
 │   └── types.py        # Typed contracts and JSON serialization
-├── storage.py          # Local SQLite CRUD for connection profiles
+├── credentials.py      # Native OS keyring access, with no file/null fallback
+├── storage.py          # SQLite profile metadata and OS credential references
 ├── server.py           # FastMCP server exposing read-only tools over stdio
 └── web.py              # Local web UI (FastAPI) on localhost:8000
 ```
@@ -58,7 +59,7 @@ src/
    Open [http://localhost:8000](http://localhost:8000) in your browser:
    - Add your database connection parameters (Host, Port, Database, User, Password, SSL mode).
    - Click **Test Connection** to verify connectivity.
-   - Click **Save Profile** to store it in your local SQLite database.
+   - Click **Save Profile** to store metadata in SQLite and the password in your OS secret store. Your OS may ask you to unlock the keychain.
    - Click **Activate** on the profile you wish the MCP server to use.
 
 ---
@@ -155,9 +156,31 @@ Each profile has a configurable `statement_timeout_ms` (default: 30,000ms / 30s)
 The `explain_query` tool with `analyze=True` **actually executes the query** to collect real timing data. While the query itself is validated as read-only, complex analytical queries may impact server performance. Use with caution on production databases.
 
 ### Password Storage
-Connection passwords are stored **unencrypted** in the local SQLite database at `~/.config/pgprism/profiles.db` (with backward-compatible fallback to `~/.config/mcp-postgresql/profiles.db`). This is acceptable for local development debugging. For production environments, consider:
-- Using `PGPASSFILE` or environment variables
-- OS keychain integration (planned for a future release)
+Saved connection passwords use the operating system's secret store through [Python keyring](https://keyring.readthedocs.io/). SQLite contains connection metadata and opaque credential references, never new passwords. HTTP profile responses and MCP profile metadata do not include passwords.
+
+| Platform | Supported native store | Setup |
+| :--- | :--- | :--- |
+| macOS | Keychain | Unlock the user's login keychain when prompted. |
+| Windows | Credential Locker | Run the web UI and MCP client as the same Windows user. |
+| Linux | Secret Service or KWallet | Start and unlock a compatible desktop secret service. KWallet also needs the Python D-Bus bindings available to the virtual environment. |
+
+Run the web UI and MCP client as the same OS user and in the same desktop session. On Linux, both need access to the session D-Bus. Installing the Python package alone does not install or unlock a desktop secret service. GNOME Keyring provides Secret Service; KDE users can use KWallet with its D-Bus bindings.
+
+PgPrism accepts only native OS backends. Plaintext files, `keyrings.alt` file backends, null keyrings and custom backends are rejected. If `keyring` selects a chain, PgPrism pins one native backend rather than falling through to another store. A locked or unavailable store raises an explicit error; HTTP requests return 503. Profiles with empty passwords and environment-only connections do not require a stored secret.
+
+#### HTTP validation errors
+Invalid requests return HTTP 422 with a `detail` list containing only `type`, `loc` and `msg` for each validation error. Responses omit received values, the request body and raw exception context, which can contain connection passwords. This applies to profile creation, connection tests, malformed JSON and invalid profile IDs. Validation failures do not save profiles or credentials.
+
+#### Existing profiles and migration
+On startup, PgPrism automatically moves existing SQLite passwords to the OS store. The web app initializes storage during its ASGI lifespan, not when importing `src.web` or constructing `create_app()`. Each secret is written and read back before its SQLite value is cleared. If a secret cannot be stored, the migration rolls back and the original profiles remain available for retry after unlocking the store. Close older PgPrism processes before upgrading so they cannot write plaintext again.
+
+Migration enables SQLite secure deletion, compacts the database and requests a WAL checkpoint. A busy checkpoint logs a warning; close other readers and checkpoint the database before treating old WAL files as sanitized. These steps cannot erase passwords from existing backups, filesystem snapshots or storage-device history. Protect or remove old copies appropriately, and rotate credentials if they may have been exposed.
+
+The metadata database remains at `~/.config/pgprism/profiles.db`, with the existing legacy and local path fallbacks. Copying that file to a different user or machine does **not** copy its passwords. Recreate profiles with their passwords on the destination. If a saved secret is missing, PgPrism reports it rather than treating it as an empty password.
+
+Updating a password creates a new reference and removes the old secret after SQLite commits. If removal of an obsolete secret fails, PgPrism logs its reference for manual cleanup under the `pgprism` service in the OS store. SQLite and the OS store are not one atomic transaction; interruption can leave unused secrets in the OS store. Deleting a profile also removes its saved secret.
+
+This protects passwords at rest, not a compromised desktop session or process. Hostnames, usernames, database names and other profile metadata remain readable in SQLite. Passwords must be present in process memory while connecting. Environment-provided credentials remain supported and are not copied into SQLite or the keyring.
 
 ### Tool Annotations
 All MCP tools declare `readOnlyHint: true` and `destructiveHint: false` in their annotations, allowing MCP clients to auto-approve tool execution without user confirmation.
@@ -170,3 +193,7 @@ Run all unit tests:
 ```bash
 .venv/bin/pytest -v
 ```
+
+Web tests should use `with TestClient(app)` to run startup and shutdown. SQLite connections are closed after each storage operation, including failures; closing does not replace transaction commit or rollback.
+
+The pytest suite uses an in-memory credential backend, not the user's keychain. `tests/native_keyring_smoke.py` is a separate native integration probe and is not collected by pytest. Run it only in an isolated D-Bus/keyring session with temporary home and XDG directories. Passing the unit suite alone does not establish native keyring integration.
