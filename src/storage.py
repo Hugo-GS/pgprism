@@ -23,16 +23,25 @@ def _has_profiles(db_path: Path) -> bool:
 
 def get_default_db_path() -> Path:
     """Resolve the SQLite profiles database path with multi-location fallback."""
+    if "PGPRISM_DB_PATH" in os.environ:
+        path = Path(os.environ["PGPRISM_DB_PATH"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
     if "MCP_POSTGRES_DB_PATH" in os.environ:
         path = Path(os.environ["MCP_POSTGRES_DB_PATH"])
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
-    config_path = Path.home() / ".config" / "mcp-postgresql" / "profiles.db"
+    config_path = Path.home() / ".config" / "pgprism" / "profiles.db"
+    legacy_config_path = Path.home() / ".config" / "mcp-postgresql" / "profiles.db"
     local_path = Path.cwd() / ".data" / "profiles.db"
 
     if _has_profiles(config_path):
         return config_path
+
+    if _has_profiles(legacy_config_path):
+        return legacy_config_path
 
     if _has_profiles(local_path):
         return local_path

@@ -1,7 +1,7 @@
 [project]
-name = "mcp-postgresql"
+name = "pgprism"
 version = "0.1.0"
-description = "Strictly read-only PostgreSQL MCP server with local SQLite profile management"
+description = "PgPrism: Strictly read-only PostgreSQL MCP server with local SQLite profile management"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -21,6 +21,8 @@ dev = [
 ]
 
 [project.scripts]
+pgprism = "src.server:main"
+pgprism-web = "src.web:main"
 mcp-postgresql = "src.server:main"
 mcp-postgresql-web = "src.web:main"
 

@@ -284,7 +284,7 @@ def test_get_pool_instantiates_connection_pool(sample_profile: Profile, clean_po
         assert kwargs["min_size"] == 0
         assert kwargs["max_size"] == 3
         assert kwargs["max_idle"] == 60.0
-        assert kwargs["kwargs"]["application_name"] == "mcp-postgresql"
+        assert kwargs["kwargs"]["application_name"] == "pgprism"
 
 
 def test_get_pool_reuses_cached_pool(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
@@ -360,7 +360,7 @@ def test_test_connection_uses_unpooled_connection(sample_profile: Profile, clean
     mock_cp.assert_not_called()
     _, kwargs = mock_connect.call_args
     assert kwargs["connect_timeout"] == 3
-    assert kwargs["application_name"] == "mcp-postgresql"
+    assert kwargs["application_name"] == "pgprism"
     assert len(PoolManager._cache) == 0
 
 

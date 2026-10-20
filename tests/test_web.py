@@ -16,7 +16,7 @@ def test_client(tmp_path: Path) -> TestClient:
 def test_index_page_loads(test_client: TestClient):
     response = test_client.get("/")
     assert response.status_code == 200
-    assert "MCP PostgreSQL" in response.text
+    assert "PgPrism" in response.text
     assert "/static/style.css" in response.text
     assert "/static/app.js" in response.text
     assert "Connection Guide" in response.text

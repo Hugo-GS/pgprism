@@ -151,9 +151,9 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
             return {"status": "error", "message": f"Explain execution error: {e}"}
 
     server = MCPServer(
-        name="mcp-postgresql",
+        name="pgprism",
         version="0.1.0",
-        description="Strictly read-only PostgreSQL MCP server with local SQLite profile configuration",
+        description="PgPrism: Strictly read-only PostgreSQL MCP server with local SQLite profile configuration",
         extensions=[apps],
     )
 

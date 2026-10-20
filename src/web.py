@@ -27,7 +27,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
     """Creates the FastAPI configuration app."""
     store = storage if storage is not None else ProfileStorage()
-    app = FastAPI(title="MCP PostgreSQL Configuration", lifespan=lifespan)
+    app = FastAPI(title="PgPrism Configuration", lifespan=lifespan)
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -66,12 +66,14 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
         repo_root = Path(__file__).resolve().parent.parent
         venv_python = repo_root / ".venv" / "bin" / "python3"
         python_exec = str(venv_python) if venv_python.exists() else sys.executable
-        cli_command = repo_root / ".venv" / "bin" / "mcp-postgresql"
+        cli_command = repo_root / ".venv" / "bin" / "pgprism"
+        if not cli_command.exists():
+            cli_command = repo_root / ".venv" / "bin" / "mcp-postgresql"
         active = store.get_active_profile()
         return {
             "project_root": str(repo_root),
             "python_executable": python_exec,
-            "cli_command": str(cli_command) if cli_command.exists() else "mcp-postgresql",
+            "cli_command": str(cli_command) if cli_command.exists() else "pgprism",
             "server_module": "src.server",
             "active_profile": active.name if active else None,
             "active_database": active.database if active else None,

@@ -1,4 +1,4 @@
-# MCP PostgreSQL (Strictly Read-Only)
+# PgPrism (Strictly Read-Only PostgreSQL MCP Server)
 
 A lightweight, strictly read-only Model Context Protocol (MCP) server for PostgreSQL built with Python.
 
@@ -30,8 +30,8 @@ src/
 
 1. **Clone the repository**:
    ```bash
-   git clone <repo-url> mcp-postgresql
-   cd mcp-postgresql
+   git clone <repo-url> pgprism
+   cd pgprism
    ```
 
 2. **Create virtual environment and install**:
@@ -111,10 +111,10 @@ Add to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "postgresql": {
-      "command": "/path/to/mcp-postgresql/.venv/bin/python3",
+    "pgprism": {
+      "command": "/path/to/pgprism/.venv/bin/python3",
       "args": ["-m", "src.server"],
-      "cwd": "/path/to/mcp-postgresql"
+      "cwd": "/path/to/pgprism"
     }
   }
 }
@@ -124,7 +124,7 @@ Add to your `claude_desktop_config.json`:
 Configure the command:
 ```json
 {
-  "command": "/path/to/mcp-postgresql/.venv/bin/mcp-postgresql"
+  "command": "/path/to/pgprism/.venv/bin/pgprism"
 }
 ```
 
@@ -144,7 +144,7 @@ Each profile has a configurable `statement_timeout_ms` (default: 30,000ms / 30s)
 The `explain_query` tool with `analyze=True` **actually executes the query** to collect real timing data. While the query itself is validated as read-only, complex analytical queries may impact server performance. Use with caution on production databases.
 
 ### Password Storage
-Connection passwords are stored **unencrypted** in the local SQLite database at `~/.config/mcp-postgresql/profiles.db`. This is acceptable for local development debugging. For production environments, consider:
+Connection passwords are stored **unencrypted** in the local SQLite database at `~/.config/pgprism/profiles.db` (with backward-compatible fallback to `~/.config/mcp-postgresql/profiles.db`). This is acceptable for local development debugging. For production environments, consider:
 - Using `PGPASSFILE` or environment variables
 - OS keychain integration (planned for a future release)
 

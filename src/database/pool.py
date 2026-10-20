@@ -14,7 +14,7 @@ from src.storage import Profile
 MAX_POOLS = 4
 POOL_MAX_SIZE = 3
 POOL_MAX_IDLE_S = 60.0
-APPLICATION_NAME = "mcp-postgresql"
+APPLICATION_NAME = "pgprism"
 
 
 def _close_quietly(pools: Iterable[ConnectionPool]) -> None:

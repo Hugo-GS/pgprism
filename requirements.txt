@@ -17,8 +17,8 @@ iniconfig==2.3.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 mcp==2.2.0
-# Editable Git install with no remote (mcp-postgresql==0.1.0)
--e /home/hugo-gs/Dev/Personal/python_projects/mcp-postgresql
+# Editable Git install with no remote (pgprism==0.1.0)
+-e .
 mcp-types==2.2.0
 opentelemetry-api==1.44.0
 packaging==26.3

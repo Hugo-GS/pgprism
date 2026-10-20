@@ -1,7 +1,7 @@
 let envInfo = {
-    project_root: "/path/to/mcp-postgresql",
+    project_root: "/path/to/pgprism",
     python_executable: "python3",
-    cli_command: "mcp-postgresql",
+    cli_command: "pgprism",
     server_module: "src.server",
     active_profile: null,
     active_database: null,
@@ -217,7 +217,7 @@ function renderConfigSnippets() {
 
     const claudeJson = {
         mcpServers: {
-            postgresql: {
+            pgprism: {
                 command: py,
                 args: ["-m", "src.server"],
                 cwd: cwd
@@ -229,7 +229,7 @@ function renderConfigSnippets() {
 
     const cursorJson = {
         mcpServers: {
-            postgresql: {
+            pgprism: {
                 command: py,
                 args: ["-m", "src.server"],
                 cwd: cwd
@@ -241,7 +241,7 @@ function renderConfigSnippets() {
 
     const antigravityJson = {
         mcpServers: {
-            postgresql: {
+            pgprism: {
                 command: py,
                 args: ["-m", "src.server"],
                 cwd: cwd
@@ -253,7 +253,7 @@ function renderConfigSnippets() {
 
     const vscodeJson = {
         mcpServers: {
-            postgresql: {
+            pgprism: {
                 command: py,
                 args: ["-m", "src.server"],
                 cwd: cwd
