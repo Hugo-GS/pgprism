@@ -22,8 +22,6 @@ class DatabaseManager:
     def __init__(self, profile, database: Optional[str] = None) -> None:
         self._pool = PoolManager(profile, database)
 
-    # --- Forwarded pool properties ---
-
     @property
     def profile(self):
         return self._pool.profile
@@ -47,8 +45,6 @@ class DatabaseManager:
     def test_connection(self, timeout: float = 5.0) -> Tuple[bool, str]:
         """Tests the connection and returns (success, message_or_version)."""
         return self._pool.test_connection(timeout)
-
-    # --- Query execution (owns security boundary) ---
 
     def execute_query(
         self,
@@ -113,8 +109,6 @@ class DatabaseManager:
                     lines = [r[0] for r in rows]
                     return "\n".join(lines)
 
-    # --- Schema introspection (delegated) ---
-
     def list_databases(self) -> List[str]:
         """Lists accessible non-template databases on the PostgreSQL server."""
         return introspection.list_databases(self._pool)
@@ -142,8 +136,6 @@ class DatabaseManager:
     def list_constraints(self, table_name: str, schema: str = "public") -> list[dict[str, JsonValue]]:
         """Lists CHECK, UNIQUE, and EXCLUDE constraints for a table."""
         return introspection.list_constraints(self._pool, table_name, schema)
-
-    # --- Diagnostics (delegated) ---
 
     def table_stats(self, table_name: str, schema: str = "public") -> Dict[str, JsonValue]:
         """Returns table statistics from pg_stat_user_tables."""

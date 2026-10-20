@@ -12,7 +12,6 @@ from src.database.types import (
     serialize_value,
 )
 
-# Backward compatibility aliases
 _serialize_value = serialize_value
 _pool_cache = PoolManager._cache
 

@@ -230,7 +230,6 @@ class ProfileStorage:
             if row:
                 return self._row_to_profile(row)
 
-            # No explicitly active profile — fall back to first stored
             fallback_row = conn.execute(
                 "SELECT * FROM profiles ORDER BY id ASC LIMIT 1"
             ).fetchone()
@@ -242,7 +241,6 @@ class ProfileStorage:
     def save_profile(self, profile: ProfileCreate) -> Profile:
         now = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
-            # If this is the first profile being saved, make it active automatically
             count = conn.execute("SELECT COUNT(*) as count FROM profiles").fetchone()["count"]
             is_active = 1 if count == 0 else 0
 
@@ -268,7 +266,10 @@ class ProfileStorage:
             profile_id = cursor.lastrowid
             conn.commit()
 
-        return self.get_profile(profile_id)  # type: ignore
+        saved = self.get_profile(profile_id)
+        if saved is None:
+            raise RuntimeError(f"Failed to retrieve profile after creation with id {profile_id}")
+        return saved
 
     def update_profile(self, profile_id: int, profile: ProfileCreate) -> Optional[Profile]:
         now = datetime.now(timezone.utc).isoformat()
@@ -297,7 +298,6 @@ class ProfileStorage:
 
     def set_active_profile(self, profile_id: int) -> Optional[Profile]:
         with self._get_connection() as conn:
-            # First check if profile exists
             row = conn.execute("SELECT id FROM profiles WHERE id = ?", (profile_id,)).fetchone()
             if not row:
                 return None
@@ -310,7 +310,6 @@ class ProfileStorage:
 
     def delete_profile(self, profile_id: int) -> bool:
         with self._get_connection() as conn:
-            # Check if active profile is being deleted
             profile = self.get_profile(profile_id)
             if not profile:
                 return False
@@ -318,7 +317,6 @@ class ProfileStorage:
             cursor = conn.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
             conn.commit()
 
-            # If the deleted profile was active, make another profile active if available
             if profile.is_active:
                 remaining = conn.execute("SELECT id FROM profiles LIMIT 1").fetchone()
                 if remaining:

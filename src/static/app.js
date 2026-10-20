@@ -1,4 +1,3 @@
-// Global state
 let envInfo = {
     project_root: "/path/to/mcp-postgresql",
     python_executable: "python3",
@@ -125,7 +124,6 @@ async function testConnection() {
     }
 }
 
-// Navigation Tabs
 function initTabs() {
     const tabs = ['profiles', 'connection', 'docs'];
     tabs.forEach(tab => {
@@ -158,7 +156,6 @@ function switchTab(targetTab) {
     window.location.hash = targetTab;
 }
 
-// Client Config switching inside Connection Guide
 function switchClientConfig(clientKey) {
     const clients = ['claude', 'cursor', 'antigravity', 'vscode', 'cli'];
     const tabs = document.querySelectorAll('.client-tab');
@@ -193,7 +190,6 @@ function updateActiveProfileHeader(profile) {
     }
 }
 
-// Load dynamic server & environment metadata
 async function loadEnvInfo() {
     try {
         const res = await fetch('/api/info');
@@ -219,7 +215,6 @@ function renderConfigSnippets() {
     const py = envInfo.python_executable;
     const cwd = envInfo.project_root;
 
-    // Claude Desktop
     const claudeJson = {
         mcpServers: {
             postgresql: {
@@ -232,7 +227,6 @@ function renderConfigSnippets() {
     const elClaude = document.getElementById('snippet-claude');
     if (elClaude) elClaude.textContent = JSON.stringify(claudeJson, null, 2);
 
-    // Cursor
     const cursorJson = {
         mcpServers: {
             postgresql: {
@@ -245,7 +239,6 @@ function renderConfigSnippets() {
     const elCursor = document.getElementById('snippet-cursor');
     if (elCursor) elCursor.textContent = JSON.stringify(cursorJson, null, 2);
 
-    // Antigravity
     const antigravityJson = {
         mcpServers: {
             postgresql: {
@@ -258,7 +251,6 @@ function renderConfigSnippets() {
     const elAntigravity = document.getElementById('snippet-antigravity');
     if (elAntigravity) elAntigravity.textContent = JSON.stringify(antigravityJson, null, 2);
 
-    // VS Code / Cline
     const vscodeJson = {
         mcpServers: {
             postgresql: {
@@ -271,14 +263,12 @@ function renderConfigSnippets() {
     const elVscode = document.getElementById('snippet-vscode');
     if (elVscode) elVscode.textContent = JSON.stringify(vscodeJson, null, 2);
 
-    // Direct CLI
     const elCli = document.getElementById('snippet-cli');
     if (elCli) {
         elCli.textContent = `# 1. Enter project workspace:\ncd ${cwd}\n\n# 2. Launch stdio MCP server:\n${py} -m src.server\n\n# Or using installed binary entrypoint:\n${envInfo.cli_command}`;
     }
 }
 
-// Copy snippet to clipboard
 async function copySnippet(elementId) {
     const codeEl = document.getElementById(elementId);
     if (!codeEl) return;
@@ -301,7 +291,6 @@ async function copySnippet(elementId) {
     }
 }
 
-// Category filter
 function setCategoryFilter(category) {
     currentCategory = category;
     const pills = document.querySelectorAll('.cat-pill');
@@ -315,7 +304,6 @@ function setCategoryFilter(category) {
     filterTools();
 }
 
-// Documentation search/filter
 function filterTools() {
     const query = (document.getElementById('toolFilter').value || '').toLowerCase().trim();
     const cards = document.querySelectorAll('.tool-card');
@@ -328,7 +316,6 @@ function filterTools() {
     });
 }
 
-// Profile Form submit
 document.getElementById('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = getFormData();
@@ -355,7 +342,6 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
     }
 });
 
-// Initialization
 initTabs();
 loadProfiles();
 loadEnvInfo();

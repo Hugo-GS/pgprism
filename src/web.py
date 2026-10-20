@@ -29,7 +29,6 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
     store = storage if storage is not None else ProfileStorage()
     app = FastAPI(title="MCP PostgreSQL Configuration", lifespan=lifespan)
 
-    # Mount static assets (CSS, JS, etc.)
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -133,7 +132,6 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
 
     @app.post("/api/profiles/test")
     def test_profile_connection(payload: ProfileCreate):
-        # Create temporary Profile instance to test
         temp_profile = Profile(
             id=0,
             name=payload.name,

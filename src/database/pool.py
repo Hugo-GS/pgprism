@@ -11,13 +11,9 @@ from psycopg_pool import ConnectionPool, PoolClosed
 
 from src.storage import Profile
 
-# Maximum number of pools kept per process; the least recently used is evicted.
 MAX_POOLS = 4
-# Maximum connections held by a single pool.
 POOL_MAX_SIZE = 3
-# Seconds an idle connection is kept before the pool closes it.
 POOL_MAX_IDLE_S = 60.0
-# Reported to the server so backends opened by this tool are identifiable.
 APPLICATION_NAME = "mcp-postgresql"
 
 
@@ -66,7 +62,6 @@ class PoolManager:
 
     @staticmethod
     def _pool_key(profile: Profile, database: str) -> str:
-        # Include a hash of sensitive/mutable fields to detect credential changes.
         secret = f"{profile.password or ''}:{profile.statement_timeout_ms}"
         secret_hash = hashlib.sha256(secret.encode()).hexdigest()[:12]
         return f"{PoolManager._pool_identity(profile, database)}/{secret_hash}"
@@ -90,7 +85,6 @@ class PoolManager:
                 self._cache.move_to_end(key)
                 return pool
 
-            # Same target with different credentials/timeout: the old pool is stale.
             for stale_key in [k for k in self._cache if k.rsplit("/", 1)[0] == identity]:
                 to_close.append(self._cache.pop(stale_key))
 
@@ -109,7 +103,6 @@ class PoolManager:
                 _, evicted = self._cache.popitem(last=False)
                 to_close.append(evicted)
 
-        # close() may block up to 5s joining pool workers, so never hold the lock here.
         _close_quietly(to_close)
         return pool
 
@@ -126,7 +119,6 @@ class PoolManager:
         try:
             return stack.enter_context(self.get_pool(db_override).connection())
         except PoolClosed:
-            # The pool was evicted by another thread; get_pool returns a fresh one.
             return stack.enter_context(self.get_pool(db_override).connection())
 
     @contextmanager
