@@ -156,7 +156,7 @@ Each profile has a configurable `statement_timeout_ms` (default: 30,000ms / 30s)
 The `explain_query` tool with `analyze=True` **actually executes the query** to collect real timing data. While the query itself is validated as read-only, complex analytical queries may impact server performance. Use with caution on production databases.
 
 ### Password Storage
-Saved connection passwords use the operating system's secret store through [Python keyring](https://keyring.readthedocs.io/). SQLite contains connection metadata and opaque credential references, never new passwords. MCP profile metadata does not include passwords.
+Saved connection passwords use the operating system's secret store through [Python keyring](https://keyring.readthedocs.io/). SQLite contains connection metadata and opaque credential references, never new passwords. HTTP profile responses and MCP profile metadata do not include passwords.
 
 | Platform | Supported native store | Setup |
 | :--- | :--- | :--- |
@@ -167,6 +167,9 @@ Saved connection passwords use the operating system's secret store through [Pyth
 Run the web UI and MCP client as the same OS user and in the same desktop session. On Linux, both need access to the session D-Bus. Installing the Python package alone does not install or unlock a desktop secret service. GNOME Keyring provides Secret Service; KDE users can use KWallet with its D-Bus bindings.
 
 PgPrism accepts only native OS backends. Plaintext files, `keyrings.alt` file backends, null keyrings and custom backends are rejected. If `keyring` selects a chain, PgPrism pins one native backend rather than falling through to another store. A locked or unavailable store raises an explicit error; HTTP requests return 503. Profiles with empty passwords and environment-only connections do not require a stored secret.
+
+#### HTTP validation errors
+Invalid requests return HTTP 422 with a `detail` list containing only `type`, `loc` and `msg` for each validation error. Responses omit received values, the request body and raw exception context, which can contain connection passwords. This applies to profile creation, connection tests, malformed JSON and invalid profile IDs. Validation failures do not save profiles or credentials.
 
 #### Existing profiles and migration
 On startup, PgPrism automatically moves existing SQLite passwords to the OS store. The web app initializes storage during its ASGI lifespan, not when importing `src.web` or constructing `create_app()`. Each secret is written and read back before its SQLite value is cleared. If a secret cannot be stored, the migration rolls back and the original profiles remain available for retry after unlocking the store. Close older PgPrism processes before upgrading so they cannot write plaintext again.
@@ -192,3 +195,5 @@ Run all unit tests:
 ```
 
 Web tests should use `with TestClient(app)` to run startup and shutdown. SQLite connections are closed after each storage operation, including failures; closing does not replace transaction commit or rollback.
+
+The pytest suite uses an in-memory credential backend, not the user's keychain. `tests/native_keyring_smoke.py` is a separate native integration probe and is not collected by pytest. Run it only in an isolated D-Bus/keyring session with temporary home and XDG directories. Passing the unit suite alone does not establish native keyring integration.
