@@ -1,14 +1,20 @@
-# PgPrism (Strictly Read-Only PostgreSQL MCP Server)
+# PgPrism
 
-A lightweight, strictly read-only Model Context Protocol (MCP) server for PostgreSQL built with Python.
+**PgPrism** is a strictly read-only Model Context Protocol (MCP) server for PostgreSQL. It bridges the gap between complex PostgreSQL databases and AI agents, transforming relational data structures into clear, safe, and actionable insights.
 
-Features:
+- **PostgreSQL**: Houses your schemas, tables, relationships, and raw data.
+- **PgPrism**: Refracts and exposes that database information through a hardened read-only interface.
+- **AI Agents**: Query, inspect, and analyze the database via MCP without any ability to mutate data, execute DDL, or trigger destructive locks.
+
+## Key Features
+
 - **Strict Read-Only Defense in Depth**:
-  - **AST Layer**: Uses `sqlglot` to parse and validate queries before execution, rejecting any mutations (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `MERGE`), write CTEs, or administrative procedure calls.
+  - **AST Layer**: Uses `sqlglot` to parse and validate queries before execution, rejecting any mutations (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `MERGE`), write CTEs, `SELECT INTO`, row locks (`FOR UPDATE`), or dangerous administrative functions.
   - **Session Layer**: Enforces `SET default_transaction_read_only = on` and runs all queries inside explicit read-only transactions at the PostgreSQL engine level.
+- **Bounded Connection Pooling**: Self-draining LRU pool cache that prevents connection leaks and bounds resource usage per process.
 - **Local SQLite Profile Storage**: Store and switch database credentials locally without cloud tokens or external dependencies.
-- **Web Configuration UI**: A clean, local web dashboard to manage profiles, test connectivity, and activate databases.
-- **Interactive MCP UI (MCP Apps)**: Built-in rich in-chat UI components for query plan visualization (`explain_query`) and tabular data inspection (`read_query`) following the official `@modelcontextprotocol/ext-apps` standard.
+- **Web Configuration UI**: A clean, local web dashboard to manage profiles, test connectivity, and inspect documentation.
+- **Interactive MCP UI (MCP Apps)**: Built-in visual in-chat components for execution plan exploration (`explain_query`) and tabular data inspection (`read_query`) following the official `@modelcontextprotocol/ext-apps` standard.
 - **Pragmatic Modular Architecture**: Zero enterprise boilerplate or unnecessary abstract classes.
 
 ---
@@ -17,11 +23,16 @@ Features:
 
 ```text
 src/
-├── security.py   # SQL AST validator (sqlglot) enforcing read-only queries
-├── database.py   # PostgreSQL connection management (psycopg v3) with read-only sessions
-├── storage.py    # Local SQLite CRUD for connection profiles
-├── server.py     # FastMCP server exposing read-only tools over stdio
-└── web.py        # Local web UI (FastAPI) on localhost:8000
+├── security.py         # SQL AST validator (sqlglot) enforcing read-only queries
+├── database/           # PostgreSQL connection management with read-only sessions
+│   ├── pool.py         # Bounded LRU connection pool management
+│   ├── manager.py      # Database query and schema facade
+│   ├── introspection.py# Database, schema, table, index, and constraint discovery
+│   ├── diagnostics.py  # Query inspection, stats, and database size telemetry
+│   └── types.py        # Typed contracts and JSON serialization
+├── storage.py          # Local SQLite CRUD for connection profiles
+├── server.py           # FastMCP server exposing read-only tools over stdio
+└── web.py              # Local web UI (FastAPI) on localhost:8000
 ```
 
 ---
