@@ -1,6 +1,83 @@
+import sqlite3
 from pathlib import Path
+
 import pytest
-from src.storage import ProfileCreate, ProfileStorage
+
+from src.storage import ProfileCreate, ProfileStorage, get_default_db_path
+
+
+@pytest.fixture
+def sqlite_connections(monkeypatch: pytest.MonkeyPatch):
+    connections = []
+    connect = sqlite3.connect
+
+    def track_connection(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        connections.append(conn)
+        return conn
+
+    monkeypatch.setattr("src.storage.sqlite3.connect", track_connection)
+    yield connections
+    for conn in connections:
+        conn.close()
+
+
+def assert_connections_closed(connections):
+    assert connections
+    for conn in connections:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            conn.execute("SELECT 1")
+
+
+def test_connections_close_after_save_and_reopen(tmp_path: Path, sqlite_connections):
+    path = tmp_path / "profiles.db"
+    storage = ProfileStorage(path)
+    saved = storage.save_profile(ProfileCreate(name="persisted", username="reader"))
+
+    reopened = ProfileStorage(path)
+    assert reopened.get_profile(saved.id) == saved
+    assert_connections_closed(sqlite_connections)
+
+
+def test_connections_close_and_roll_back_failed_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sqlite_connections
+):
+    storage = ProfileStorage(tmp_path / "profiles.db")
+    first = storage.save_profile(ProfileCreate(name="first", username="reader"))
+    second = storage.save_profile(ProfileCreate(name="second", username="reader"))
+    connect = sqlite3.connect
+
+    class FailedCommitConnection(sqlite3.Connection):
+        def commit(self):
+            raise sqlite3.OperationalError("simulated commit failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            "src.storage.sqlite3.connect",
+            lambda *args, **kwargs: connect(*args, factory=FailedCommitConnection, **kwargs),
+        )
+        with pytest.raises(sqlite3.OperationalError, match="simulated commit failure"):
+            storage.set_active_profile(second.id)
+
+    assert storage.list_profiles() == [first, second]
+    assert_connections_closed(sqlite_connections)
+
+
+def test_default_path_probes_close_connections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sqlite_connections
+):
+    monkeypatch.delenv("PGPRISM_DB_PATH", raising=False)
+    monkeypatch.delenv("MCP_POSTGRES_DB_PATH", raising=False)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.chdir(tmp_path)
+    config = tmp_path / ".config" / "pgprism" / "profiles.db"
+    config.parent.mkdir(parents=True)
+    config.write_bytes(b"not a SQLite database")
+    legacy = tmp_path / ".config" / "mcp-postgresql" / "profiles.db"
+    ProfileStorage(legacy).save_profile(ProfileCreate(name="legacy", username="reader"))
+
+    assert get_default_db_path() == legacy
+    assert_connections_closed(sqlite_connections)
 
 
 @pytest.fixture
