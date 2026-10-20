@@ -1,17 +1,43 @@
+# Byte-compiled / optimized / ambient
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Virtual environments
 .venv/
 env/
 venv/
+
+# Environment and secrets
+.env
+.env.*
+
+# Databases & local data
 *.sqlite3
 *.db
+.data/
+
+# Testing & linters
 .pytest_cache/
 .coverage
 htmlcov/
-.DS_Store
-.data/
+.mypy_cache/
+.ruff_cache/
+
+# Builds & packaging
 *.egg-info/
 dist/
 build/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# IDEs & editors
+.vscode/
+.idea/
+
+# AI & development tooling
 .agents/
+odd/
+atl/
