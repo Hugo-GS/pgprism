@@ -5,11 +5,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from src.database import DatabaseManager, close_all_pools
-from src.storage import Profile, ProfileCreate, ProfileStorage
+from src.credentials import CredentialStoreError
+from src.storage import Profile, ProfileCreate, ProfileStorage, PublicProfile
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_DIR / "index.html"
@@ -33,6 +35,20 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
 
     def get_storage() -> ProfileStorage:
         return app.state.storage
+
+    @app.exception_handler(CredentialStoreError)
+    async def credential_store_error(_request, error: CredentialStoreError):
+        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(error)})
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error(_request, error: RequestValidationError):
+        # Even a missing unrelated field can include the entire body in "input".
+        # Return only validation metadata, never raw inputs or exception context.
+        details = [
+            {key: item[key] for key in ("type", "loc", "msg")}
+            for item in error.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": details})
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -84,13 +100,13 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
             "active_database": active.database if active else None,
         }
 
-    @app.get("/api/profiles", response_model=List[Profile])
+    @app.get("/api/profiles", response_model=List[PublicProfile])
     def list_profiles(q: Optional[str] = None):
         if q and q.strip():
             return get_storage().search_profiles(q.strip())
         return get_storage().list_profiles()
 
-    @app.post("/api/profiles", response_model=Profile, status_code=status.HTTP_201_CREATED)
+    @app.post("/api/profiles", response_model=PublicProfile, status_code=status.HTTP_201_CREATED)
     def create_profile(payload: ProfileCreate):
         store = get_storage()
         existing = store.get_profile_by_name(payload.name)
@@ -101,7 +117,7 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
             )
         return store.save_profile(payload)
 
-    @app.post("/api/profiles/{profile_id}/activate", response_model=Profile)
+    @app.post("/api/profiles/{profile_id}/activate", response_model=PublicProfile)
     def activate_profile(profile_id: int):
         profile = get_storage().set_active_profile(profile_id)
         if not profile:
