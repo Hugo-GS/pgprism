@@ -30,6 +30,7 @@ src/
 │   ├── introspection.py# Database, schema, table, index, and constraint discovery
 │   ├── diagnostics.py  # Query inspection, stats, and database size telemetry
 │   └── types.py        # Typed contracts and JSON serialization
+├── credentials.py      # Native OS credential-store adapter
 ├── storage.py          # Local SQLite CRUD for connection profiles
 ├── server.py           # FastMCP server exposing read-only tools over stdio
 └── web.py              # Local web UI (FastAPI) on localhost:8000
@@ -158,6 +159,8 @@ The `explain_query` tool with `analyze=True` **actually executes the query** to 
 Connection passwords are stored **unencrypted** in the local SQLite database at `~/.config/pgprism/profiles.db` (with backward-compatible fallback to `~/.config/mcp-postgresql/profiles.db`). This is acceptable for local development debugging. For production environments, consider:
 - Using `PGPASSFILE` or environment variables
 - OS keychain integration (planned for a future release)
+
+The native adapter in `src.credentials` rejects file and null backends. Wiring profiles into this adapter follows in the dependent review slices.
 
 ### Tool Annotations
 All MCP tools declare `readOnlyHint: true` and `destructiveHint: false` in their annotations, allowing MCP clients to auto-approve tool execution without user confirmation.
