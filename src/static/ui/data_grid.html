@@ -5,33 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PostgreSQL Query Result Data Grid</title>
   <style>
+    /* Flat Corporate dark tokens (see src/static/tokens.css); inlined because MCP app views must be self-contained. */
     :root {
-      --bg: #09090b;
-      --surface: #111114;
-      --surface-raised: #18181d;
-      --surface-hover: #1f1f26;
-      --surface-active: #272732;
-      --border: #222227;
-      --border-subtle: #19191e;
-      --border-focus: #3b3b44;
-      --text: #f4f4f5;
-      --text-secondary: #a1a1aa;
-      --text-muted: #71717a;
-      --text-dim: #52525b;
-      --accent: #38bdf8;
-      --accent-dim: rgba(56, 189, 248, 0.12);
-      --accent-border: rgba(56, 189, 248, 0.35);
-      --emerald: #10b981;
-      --emerald-dim: rgba(16, 185, 129, 0.12);
-      --emerald-border: #065f46;
-      --amber: #f59e0b;
-      --amber-dim: rgba(245, 158, 11, 0.12);
-      --amber-border: #78350f;
-      --red: #f43f5e;
-      --red-dim: rgba(244, 63, 94, 0.14);
-      --red-border: #881337;
-      --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color-scheme: dark;
+      --bg: #101112;
+      --surface: #101112;
+      --surface-raised: #101112;
+      --surface-hover: #1b1e21;
+      --surface-active: #2b2e33;
+      --field: #23262a;
+      --field-border: #343940;
+      --border: #494c51;
+      --border-subtle: #2b2e33;
+      --border-focus: #494c51;
+      --text: #f1f2f4;
+      --text-secondary: #b0b4bb;
+      --text-muted: #8b919a;
+      --text-dim: #8b919a;
+      --accent: #41b5cd;
+      --accent-solid: #00768d;
+      --accent-solid-hover: #00667c;
+      --accent-dim: #112a31;
+      --accent-border: #00768d;
+      --info: #a2b9f5;
+      --purple: #bda3ee;
+      --emerald: #4be0af;
+      --emerald-dim: #0b2a22;
+      --emerald-border: #0b2a22;
+      --amber: #e6c55b;
+      --amber-dim: #30260e;
+      --amber-border: #30260e;
+      --red: #f3a0ab;
+      --red-dim: #301b21;
+      --red-border: #301b21;
+      --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+      --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -52,12 +60,12 @@
     /* Top Control Bar */
     header {
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.45rem 0.85rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 1rem;
+      gap: 0.6rem;
       flex-shrink: 0;
       flex-wrap: wrap;
     }
@@ -82,27 +90,26 @@
       align-items: center;
       font-family: var(--font-mono);
       font-size: 0.72rem;
-      padding: 0.15rem 0.45rem;
-      border-radius: 4px;
-      font-weight: 500;
+      padding: 0.3rem 0.7rem;
+      border-radius: 10px;
+      corner-shape: squircle;
+      font-weight: 600;
+      border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
     }
 
     .badge-demo {
       background: var(--amber-dim);
       color: var(--amber);
-      border: 1px solid var(--amber-border);
     }
 
     .badge-live {
       background: var(--emerald-dim);
       color: var(--emerald);
-      border: 1px solid var(--emerald-border);
     }
 
     .badge-truncated {
       background: var(--red-dim);
       color: var(--red);
-      border: 1px solid var(--red-border);
     }
 
     .controls-center {
@@ -116,17 +123,17 @@
     .search-box {
       display: flex;
       align-items: center;
-      background: var(--surface-raised);
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      background: var(--field);
+      border: 1px solid var(--field-border);
+      border-radius: 5px;
       padding: 0.35rem 0.65rem;
       width: 100%;
-      transition: border-color 0.15s ease;
+      transition: border-color 0.14s ease, box-shadow 0.14s ease;
     }
 
     .search-box:focus-within {
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--accent-dim);
+      box-shadow: 0 0 0 1px var(--accent-border);
     }
 
     .search-box svg {
@@ -156,9 +163,9 @@
     }
 
     .btn {
-      background: var(--surface-raised);
+      background: transparent;
       border: 1px solid var(--border);
-      color: var(--text-secondary);
+      color: var(--text);
       padding: 0.35rem 0.65rem;
       font-size: 0.78rem;
       border-radius: 5px;
@@ -176,13 +183,14 @@
     }
 
     .btn-primary {
-      background: var(--accent-dim);
-      border-color: var(--accent-border);
-      color: var(--accent);
+      background: var(--accent-solid);
+      border-color: var(--accent-solid);
+      color: #ffffff;
     }
     .btn-primary:hover {
-      background: var(--accent);
-      color: var(--bg);
+      background: var(--accent-solid-hover);
+      border-color: var(--accent-solid-hover);
+      color: #ffffff;
     }
 
     /* Grid Area */
@@ -215,9 +223,8 @@
       color: var(--text-secondary);
       text-align: left;
       padding: 0.6rem 0.8rem;
-      font-weight: 600;
-      border-bottom: 2px solid var(--border);
-      border-right: 1px solid var(--border-subtle);
+      font-weight: 550;
+      border-bottom: 1px solid var(--border-subtle);
       user-select: none;
       cursor: pointer;
       transition: background 0.12s ease;
@@ -225,7 +232,7 @@
     }
 
     table.data-grid th:hover {
-      background: var(--surface-raised);
+      background: var(--surface-hover);
       color: var(--text);
     }
 
@@ -250,7 +257,6 @@
     table.data-grid td {
       padding: 0.45rem 0.8rem;
       border-bottom: 1px solid var(--border-subtle);
-      border-right: 1px solid var(--border-subtle);
       color: var(--text);
       max-width: 320px;
       overflow: hidden;
@@ -267,15 +273,13 @@
     }
 
     table.data-grid tr.selected {
-      background: rgba(56, 189, 248, 0.08);
-      outline: 1px solid var(--accent-border);
+      background: var(--accent-dim);
     }
 
     .row-index {
       color: var(--text-muted);
       width: 45px;
       text-align: right;
-      background: var(--surface-raised);
       user-select: none;
     }
 
@@ -286,7 +290,8 @@
     }
     .cell-num {
       text-align: right;
-      color: #93c5fd;
+      color: var(--info);
+      font-variant-numeric: tabular-nums;
     }
     .cell-bool-true {
       color: var(--emerald);
@@ -297,23 +302,27 @@
       font-weight: 600;
     }
     .cell-obj {
-      color: #c084fc;
+      color: var(--purple);
     }
 
     /* Detail Drawer */
     .row-drawer {
-      width: 380px;
+      display: none;
+      width: min(340px, 45%);
       background: var(--surface);
-      border-left: 1px solid var(--border);
-      display: flex;
+      border-left: 1px solid var(--border-subtle);
       flex-direction: column;
       flex-shrink: 0;
       overflow: hidden;
     }
 
+    .row-drawer.open {
+      display: flex;
+    }
+
     .drawer-header {
-      padding: 0.75rem 1rem;
-      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 0.85rem;
+      border-bottom: 1px solid var(--border-subtle);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -347,9 +356,9 @@
     .drawer-field-val {
       font-family: var(--font-mono);
       font-size: 0.76rem;
-      background: var(--surface-raised);
-      border: 1px solid var(--border-subtle);
-      border-radius: 4px;
+      background: var(--field);
+      border: 1px solid var(--field-border);
+      border-radius: 5px;
       padding: 0.4rem 0.6rem;
       color: var(--text);
       word-break: break-all;
@@ -359,7 +368,7 @@
     /* Footer Pagination & Stats */
     footer {
       background: var(--surface);
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--border-subtle);
       padding: 0.5rem 1rem;
       display: flex;
       align-items: center;
@@ -389,8 +398,8 @@
     }
 
     .page-select {
-      background: var(--surface-raised);
-      border: 1px solid var(--border);
+      background: var(--field);
+      border: 1px solid var(--field-border);
       color: var(--text);
       font-family: var(--font-mono);
       font-size: 0.75rem;
@@ -400,9 +409,9 @@
     }
 
     .page-btn {
-      background: var(--surface-raised);
+      background: transparent;
       border: 1px solid var(--border);
-      color: var(--text-secondary);
+      color: var(--text);
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
       cursor: pointer;
@@ -428,7 +437,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
         Query Results
       </span>
-      <span id="source-badge" class="badge badge-demo">Interactive Demo</span>
+      <span id="source-badge" class="badge badge-live" style="display:none;">Live Result</span>
       <span id="truncated-badge" class="badge badge-truncated" style="display:none;">Truncated</span>
     </div>
 
@@ -466,7 +475,10 @@
     <aside class="row-drawer" id="row-drawer">
       <div class="drawer-header">
         <span class="drawer-title" id="drawer-title">Row Inspector</span>
-        <button class="btn" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="copyRowJson()">Copy Row</button>
+        <div style="display:flex; align-items:center; gap:0.35rem;">
+          <button class="btn" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="copyRowJson()">Copy</button>
+          <button class="btn" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="closeDrawer()" title="Close Inspector">✕</button>
+        </div>
       </div>
       <div class="drawer-body" id="drawer-body">
         <div style="color:var(--text-muted); text-align:center; padding-top:2rem;">
@@ -544,32 +556,50 @@
             }
           }, "*");
           window.parent.postMessage({ jsonrpc: "2.0", method: "ui/ready" }, "*");
+          window.parent.postMessage({ jsonrpc: "2.0", method: "ui/resize", params: { height: 420 } }, "*");
         }
       } catch (e) {}
     }
 
     function extractPayload(msg) {
       if (!msg) return null;
-      let p = msg.params || msg.result || msg;
-      if (p && p.result) p = p.result;
-      if (p && p.data) p = p.data;
-      if (p && p.structuredContent) p = p.structuredContent;
+      let p = msg;
+      if (p.params) p = p.params;
+      if (p.result) p = p.result;
+      if (p.toolResult) p = p.toolResult;
+      if (p.data) p = p.data;
+      if (p.payload) p = p.payload;
+      if (p.structuredContent) p = p.structuredContent;
 
       if (p && Array.isArray(p.content) && p.content.length > 0) {
         const textItem = p.content.find(c => c.type === "text" || typeof c.text === "string");
         if (textItem && typeof textItem.text === "string") {
           try {
-            return JSON.parse(textItem.text);
-          } catch (e) {
-            return textItem.text;
-          }
+            const parsed = JSON.parse(textItem.text);
+            if (parsed && (parsed.columns || parsed.rows || Array.isArray(parsed))) return parsed;
+          } catch (e) {}
         }
       }
 
       if (typeof p === "string") {
-        try { return JSON.parse(p); } catch (e) { return p; }
+        try {
+          const parsed = JSON.parse(p);
+          if (parsed && (parsed.columns || parsed.rows || Array.isArray(parsed))) return parsed;
+        } catch (e) {
+          return p;
+        }
       }
-      return p;
+
+      if (Array.isArray(p)) {
+        const cols = p.length > 0 ? Object.keys(p[0]) : [];
+        return { columns: cols, rows: p, row_count: p.length, truncated: false };
+      }
+
+      if (p && (p.columns || p.rows)) {
+        return p;
+      }
+
+      return null;
     }
 
     // MCP Apps postMessage listener
@@ -580,48 +610,63 @@
         try { msg = JSON.parse(msg); } catch (e) { return; }
       }
 
-      if (msg.method === "ui/notifications/tool-result") {
-        const payload = extractPayload(msg.params || msg);
-        if (payload) loadGrid(payload, false);
-      } else if (msg.method === "ui/notifications/tool-input") {
-        console.debug("Received tool-input notification:", msg.params);
-      } else if (msg.method === "ui/init" || msg.method === "ui/initialize" || msg.method === "tool/result" || msg.method === "ontoolresult") {
-        const payload = extractPayload(msg.params || msg);
-        if (payload) loadGrid(payload, false);
-      } else if (msg.result && (msg.result.columns || msg.result.rows || msg.result.content)) {
-        const payload = extractPayload(msg.result);
-        if (payload) loadGrid(payload, false);
-      } else if (msg.type === "tool_result" || (msg.columns && msg.rows) || msg.status === "ok") {
-        loadGrid(msg, false);
+      const payload = extractPayload(msg);
+      if (payload && (payload.columns || payload.rows)) {
+        loadGrid(payload, false);
       }
     });
+
+    const isDemoMode = new URLSearchParams(window.location.search).get("demo") === "true";
+
+    function showWaitingState() {
+      const thead = document.getElementById("grid-header");
+      if (thead) thead.innerHTML = "";
+      const tbody = document.getElementById("grid-body");
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="10" style="text-align:center; padding:3rem 1rem; color:var(--text-muted); font-family:var(--font-mono); font-size:0.8rem;">
+              Waiting for query results from MCP server...
+            </td>
+          </tr>
+        `;
+      }
+    }
 
     if (document.readyState === "loading") {
       window.addEventListener("DOMContentLoaded", () => {
         sendAppHandshake();
-        loadGrid(DEMO_PAYLOAD, true);
+        if (isDemoMode) {
+          loadGrid(DEMO_PAYLOAD, true);
+        } else {
+          showWaitingState();
+        }
       });
     } else {
       sendAppHandshake();
-      loadGrid(DEMO_PAYLOAD, true);
+      if (isDemoMode) {
+        loadGrid(DEMO_PAYLOAD, true);
+      } else {
+        showWaitingState();
+      }
     }
 
     function loadGrid(data, isDemo = false) {
       rawData = data;
       const badge = document.getElementById("source-badge");
-      if (isDemo) {
-        badge.className = "badge badge-demo";
-        badge.textContent = "Interactive Demo";
-      } else {
-        badge.className = "badge badge-live";
-        badge.textContent = "Live Result";
+      if (badge) {
+        if (!isDemo) {
+          badge.className = "badge badge-live";
+          badge.textContent = "Live Result";
+          badge.style.display = "inline-flex";
+        } else {
+          badge.style.display = "none";
+        }
       }
 
       const truncBadge = document.getElementById("truncated-badge");
-      if (data.truncated) {
-        truncBadge.style.display = "inline-flex";
-      } else {
-        truncBadge.style.display = "none";
+      if (truncBadge) {
+        truncBadge.style.display = data.truncated ? "inline-flex" : "none";
       }
 
       columns = data.columns || (data.rows && data.rows.length > 0 ? Object.keys(data.rows[0]) : []);
@@ -634,14 +679,10 @@
       sortColumn = null;
       sortDirection = "none";
       currentPage = 1;
-      selectedRowIndex = allRows.length > 0 ? 0 : null;
+      selectedRowIndex = null;
 
       renderHeader();
       applyFiltersAndSort();
-
-      if (allRows.length > 0) {
-        selectRow(0);
-      }
     }
 
     function renderHeader() {
@@ -806,6 +847,13 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
+    function closeDrawer() {
+      const drawer = document.getElementById("row-drawer");
+      if (drawer) drawer.classList.remove("open");
+      document.querySelectorAll("table.data-grid tr.selected").forEach(r => r.classList.remove("selected"));
+      selectedRowIndex = null;
+    }
+
     function selectRow(index, trElement = null) {
       selectedRowIndex = index;
       document.querySelectorAll("table.data-grid tr.selected").forEach(r => r.classList.remove("selected"));
@@ -817,6 +865,9 @@
           allTrs[index].classList.add("selected");
         }
       }
+
+      const drawer = document.getElementById("row-drawer");
+      if (drawer) drawer.classList.add("open");
 
       const row = filteredRows[index];
       if (!row) return;

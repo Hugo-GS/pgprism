@@ -1,0 +1,130 @@
+/*
+ * Flat Corporate Design System — Original design tokens, version 1.0
+ * Designed independently. No Vaadin CSS or proprietary assets are included.
+ * Core rule: canvas === surface === panel. Borders and spacing establish hierarchy.
+ */
+:root {
+  color-scheme: dark;
+  --fc-font: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --fc-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* Functional spacing scale */
+  --fc-space-1: 4px;
+  --fc-space-2: 8px;
+  --fc-space-3: 12px;
+  --fc-space-4: 16px;
+  --fc-space-5: 20px;
+  --fc-space-6: 24px;
+  --fc-space-8: 32px;
+  --fc-space-10: 40px;
+  --fc-space-12: 48px;
+
+  --fc-radius-xs: 3px;
+  --fc-radius-sm: 5px;
+  --fc-radius-md: 7px;
+  --fc-radius-lg: 10px;
+  --fc-radius-pill: 999px;
+  --fc-border-width: 1px;
+  --fc-font-xs: 11px;
+  --fc-font-sm: 12px;
+  --fc-font-md: 13px;
+  --fc-font-base: 14px;
+  --fc-font-lg: 17px;
+  --fc-font-title: 28px;
+  --fc-line-height: 1.45;
+  --fc-control-height: 36px;
+  --fc-table-row-height: 55px;
+  --fc-panel-padding: 20px;
+  --fc-content-width: 1320px;
+  --fc-focus-width: 2px;
+  --fc-transition: 140ms ease;
+
+  /* Dark — SAME background for body, card, table, modal and sidebar. */
+  --fc-canvas: #101112;
+  --fc-surface: var(--fc-canvas);
+  --fc-surface-raised: var(--fc-canvas);
+  --fc-text: #f1f2f4;
+  --fc-text-secondary: #b0b4bb;
+  --fc-text-muted: #8b919a;
+  --fc-border: #494c51;
+  --fc-separator: #2b2e33;
+  --fc-field: #23262a;
+  --fc-field-border: #343940;
+  --fc-hover: #1b1e21;
+  --fc-selected: #20272b;
+  --fc-check-bg: #333841;
+  --fc-overlay: rgba(0,0,0,.73);
+  --fc-scrollbar: #4c5055;
+  --fc-white: #fff;
+  --fc-positive: #4be0af;
+  --fc-positive-tint: #0b2a22;
+  --fc-warning: #e6c55b;
+  --fc-warning-tint: #30260e;
+  --fc-orange: #fb923c;
+  --fc-orange-tint: #361e10;
+  --fc-danger: #f3a0ab;
+  --fc-danger-tint: #301b21;
+  --fc-info: #a2b9f5;
+  --fc-info-tint: #182437;
+  --fc-accent: #00768d;
+  --fc-accent-hover: #00667c;
+  --fc-accent-text: #ffffff;
+  --fc-accent-soft: #112a31;
+  --fc-focus-ring: #41b5cd;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --fc-canvas: #f9fafb;
+  --fc-surface: var(--fc-canvas);
+  --fc-surface-raised: var(--fc-canvas);
+  --fc-text: #20252c;
+  --fc-text-secondary: #505968;
+  --fc-text-muted: #657080;
+  --fc-border: #bbc2cb;
+  --fc-separator: #dde1e6;
+  --fc-field: #eef0f3;
+  --fc-field-border: #cbd1d8;
+  --fc-hover: #edf0f3;
+  --fc-selected: #e5eff1;
+  --fc-check-bg: #dee3e9;
+  --fc-overlay: rgba(13,19,28,.47);
+  --fc-scrollbar: #c4c9cf;
+  --fc-positive: #087653;
+  --fc-positive-tint: #e0f5eb;
+  --fc-warning: #88600a;
+  --fc-warning-tint: #fff2d2;
+  --fc-orange: #c2410c;
+  --fc-orange-tint: #ffedd5;
+  --fc-danger: #a52e48;
+  --fc-danger-tint: #fde8ec;
+  --fc-info: #365ca5;
+  --fc-info-tint: #e9effb;
+  --fc-accent-soft: #dff1f5;
+  --fc-focus-ring: #00768d;
+}
+
+:root[data-accent='cyan'] { --fc-accent: #00768d; --fc-accent-hover: #00667c; }
+:root[data-accent='cobalt'] { --fc-accent: #3455c9; --fc-accent-hover: #2945a5; }
+:root[data-accent='emerald'] { --fc-accent: #147658; --fc-accent-hover: #0d624a; }
+:root[data-accent='plum'] { --fc-accent: #7453b7; --fc-accent-hover: #604399; }
+:root[data-accent='ochre'] { --fc-accent: #90610d; --fc-accent-hover: #79500b; }
+
+/* The accent tint always has to follow theme, not the raw brand color. */
+:root[data-theme='dark'][data-accent='cobalt'] { --fc-accent-soft: #202644; --fc-selected: #202644; --fc-focus-ring: #8ca2fc; }
+:root[data-theme='dark'][data-accent='emerald'] { --fc-accent-soft: #122c25; --fc-selected: #122c25; --fc-focus-ring: #6ad8ac; }
+:root[data-theme='dark'][data-accent='plum'] { --fc-accent-soft: #292138; --fc-selected: #292138; --fc-focus-ring: #bda3ee; }
+:root[data-theme='dark'][data-accent='ochre'] { --fc-accent-soft: #2a2518; --fc-selected: #2a2518; --fc-focus-ring: #ebc47b; }
+:root[data-theme='light'][data-accent='cobalt'] { --fc-accent-soft: #e9edfc; --fc-selected: #e9edfc; --fc-focus-ring: #3455c9; }
+:root[data-theme='light'][data-accent='emerald'] { --fc-accent-soft: #e1f3e9; --fc-selected: #e1f3e9; --fc-focus-ring: #147658; }
+:root[data-theme='light'][data-accent='plum'] { --fc-accent-soft: #eee9f8; --fc-selected: #eee9f8; --fc-focus-ring: #7453b7; }
+:root[data-theme='light'][data-accent='ochre'] { --fc-accent-soft: #f6ecca; --fc-selected: #f6ecca; --fc-focus-ring: #90610d; }
+
+:root[data-density='compact'] {
+  --fc-control-height: 30px;
+  --fc-table-row-height: 41px;
+  --fc-panel-padding: 15px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --fc-transition: 0s; }
+}

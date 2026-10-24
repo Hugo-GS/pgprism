@@ -8,16 +8,62 @@ let envInfo = {
 };
 
 let currentCategory = 'all';
+let alertTimeout = null;
 
 function showAlert(msg, isError = false) {
     const el = document.getElementById('alertBox');
-    el.className = isError ? 'error' : 'ok';
-    el.textContent = (isError ? '[ERROR] ' : '[OK] ') + msg;
-    el.style.display = 'block';
-    setTimeout(() => {
-        el.className = '';
-        el.style.display = 'none';
-    }, 4000);
+    const msgEl = document.getElementById('alertMsg');
+    const timerEl = document.getElementById('alertTimer');
+    const copyBtn = document.getElementById('alertCopy');
+    const closeBtn = document.getElementById('alertClose');
+
+    el.dataset.variant = isError ? 'danger' : 'success';
+    msgEl.textContent = (isError ? 'Error: ' : '') + msg;
+    el.hidden = false;
+
+    const duration = isError ? 15000 : 4000;
+    el.style.setProperty('--toast-duration', duration + 'ms');
+
+    // Restart the timer animation
+    timerEl.style.animation = 'none';
+    timerEl.offsetHeight; // force reflow
+    timerEl.style.animation = '';
+
+    clearTimeout(alertTimeout);
+    alertTimeout = setTimeout(() => {
+        el.hidden = true;
+    }, duration);
+
+    // Copy button
+    copyBtn.onclick = () => {
+        navigator.clipboard.writeText(msg).then(() => {
+            copyBtn.style.opacity = '1';
+            setTimeout(() => copyBtn.style.opacity = '', 400);
+        });
+    };
+
+    // Close button — dismiss immediately
+    closeBtn.onclick = () => {
+        clearTimeout(alertTimeout);
+        el.hidden = true;
+    };
+}
+
+function initTheme() {
+    const root = document.documentElement;
+    const btn = document.getElementById('themeToggle');
+    const label = document.getElementById('themeLabel');
+    const render = () => {
+        label.textContent = root.dataset.theme === 'light' ? 'Dark mode' : 'Light mode';
+    };
+    btn.addEventListener('click', () => {
+        root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+        try {
+            localStorage.setItem('pgprism-theme', root.dataset.theme);
+        } catch (e) {}
+        render();
+    });
+    render();
 }
 
 function getFormData() {
@@ -31,6 +77,21 @@ function getFormData() {
         sslmode: document.getElementById('sslmode').value,
         statement_timeout_ms: parseInt(document.getElementById('statement-timeout').value, 10) || 30000,
     };
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function truncate(str, max = 40) {
+    if (!str || str.length <= max) return str || '';
+    return str.slice(0, max - 3) + '...';
 }
 
 let profileSearchTimeout = null;
@@ -48,10 +109,12 @@ async function loadProfiles(query = '') {
         const res = await fetch(url);
         const data = await res.json();
         const container = document.getElementById('profilesList');
+        const countEl = document.getElementById('profilesCount');
+        countEl.textContent = `${data.length} ${data.length === 1 ? 'profile' : 'profiles'}`;
         if (data.length === 0) {
             container.innerHTML = query.trim()
-                ? `<div class="empty-state">No profiles matching "${query.trim()}".</div>`
-                : '<div class="empty-state">No profiles configured. Add one on the left.</div>';
+                ? `<tr><td colspan="6" class="fc-empty"><strong>No matching profiles</strong>No profiles matching "${query.trim()}".</td></tr>`
+                : '<tr><td colspan="6" class="fc-empty"><strong>No profiles configured</strong>Add one with the form below.</td></tr>';
             if (!query.trim()) updateActiveProfileHeader(null);
             return;
         }
@@ -61,21 +124,25 @@ async function loadProfiles(query = '') {
             updateActiveProfileHeader(activeProfile);
         }
 
-        container.innerHTML = data.map(p => `
-            <div class="profile-card ${p.is_active ? 'active-profile' : ''}">
-                <div>
-                    <div class="profile-name">
-                        <span class="profile-indicator ${p.is_active ? '' : 'idle'}">${p.is_active ? '▶' : '·'}</span>
-                        <span>${p.name}</span>
+        container.innerHTML = data.map(p => {
+            const uri = `${p.username}@${p.host}:${p.port}/${p.database}`;
+            const displayUri = truncate(uri, 40);
+            const displayName = truncate(p.name, 40);
+            return `
+            <tr data-active="${p.is_active ? 'true' : 'false'}">
+                <td><span class="profile-name" title="${escapeHtml(p.name)}">${escapeHtml(displayName)}</span></td>
+                <td><span class="profile-uri" title="${escapeHtml(uri)}">${escapeHtml(displayUri)}</span></td>
+                <td class="fc-mono">${escapeHtml(p.sslmode)}</td>
+                <td class="num fc-mono">${p.statement_timeout_ms || 30000} ms</td>
+                <td>${p.is_active ? '<span class="fc-badge fc-badge-success">Active</span>' : '<span class="fc-badge fc-badge-idle">Idle</span>'}</td>
+                <td>
+                    <div class="row-actions">
+                        ${p.is_active ? '' : `<button type="button" onclick="activateProfile(${p.id})" class="fc-btn">Select</button>`}
+                        <button type="button" onclick="deleteProfile(${p.id})" class="fc-btn fc-btn-ghost fc-btn-danger">Delete</button>
                     </div>
-                    <div class="profile-uri">${p.username}@${p.host}:${p.port}/${p.database} &middot; ssl=${p.sslmode} &middot; timeout=${p.statement_timeout_ms || 30000}ms</div>
-                </div>
-                <div class="actions">
-                    ${p.is_active ? '<span class="status-current">current</span>' : `<button onclick="activateProfile(${p.id})" class="btn-action">Select</button>`}
-                    <button onclick="deleteProfile(${p.id})" class="btn-action btn-delete">Delete</button>
-                </div>
-            </div>
-        `).join('');
+                </td>
+            </tr>
+        `;}).join('');
     } catch (err) {
         console.error("Error loading profiles:", err);
     }
@@ -145,47 +212,53 @@ function switchTab(targetTab) {
         const panel = document.getElementById(`tab-${t}`);
         if (btn && panel) {
             if (t === targetTab) {
-                btn.classList.add('active');
-                panel.style.display = 'block';
+                btn.setAttribute('aria-current', 'page');
+                panel.hidden = false;
             } else {
-                btn.classList.remove('active');
-                panel.style.display = 'none';
+                btn.removeAttribute('aria-current');
+                panel.hidden = true;
             }
         }
     });
     window.location.hash = targetTab;
 }
 
-function switchClientConfig(clientKey) {
+function switchClientConfig(clientKey, tabBtn) {
     const clients = ['claude', 'cursor', 'antigravity', 'vscode', 'cli'];
-    const tabs = document.querySelectorAll('.client-tab');
-    tabs.forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.client-tabs .fc-tab').forEach(tab => {
+        tab.setAttribute('aria-selected', tab === tabBtn ? 'true' : 'false');
+    });
 
     clients.forEach(c => {
         const pane = document.getElementById(`config-${c}`);
         if (pane) {
-            pane.style.display = (c === clientKey) ? 'block' : 'none';
+            pane.hidden = c !== clientKey;
         }
     });
-
-    if (window.event && window.event.currentTarget) {
-        window.event.currentTarget.classList.add('active');
-    }
 }
 
 function updateActiveProfileHeader(profile) {
     const contextEl = document.getElementById('headerContextVal');
     const bannerTextEl = document.getElementById('activeProfileText');
+    const statusEl = document.getElementById('activeProfileStatus');
 
     if (profile) {
         if (contextEl) contextEl.textContent = `${profile.name} / ${profile.database}`;
         if (bannerTextEl) {
-            bannerTextEl.innerHTML = `${profile.name} &middot; <code>${profile.database}</code> @ <code>${profile.host}:${profile.port}</code>`;
+            bannerTextEl.textContent = `${profile.name} / ${profile.database} @ ${profile.host}:${profile.port}`;
+        }
+        if (statusEl) {
+            statusEl.className = 'fc-badge fc-badge-success';
+            statusEl.textContent = 'Active';
         }
     } else {
         if (contextEl) contextEl.textContent = 'none';
         if (bannerTextEl) {
-            bannerTextEl.innerHTML = `none &mdash; configure and select in <a href="#profiles" onclick="switchTab('profiles')">Profiles</a>`;
+            bannerTextEl.innerHTML = `None selected. Pick one in <a href="#profiles" onclick="switchTab('profiles')">Profiles</a>.`;
+        }
+        if (statusEl) {
+            statusEl.className = 'fc-badge fc-badge-warning';
+            statusEl.textContent = 'Not set';
         }
     }
 }
@@ -196,14 +269,6 @@ async function loadEnvInfo() {
         if (res.ok) {
             envInfo = await res.json();
             renderConfigSnippets();
-            if (envInfo.active_profile) {
-                updateActiveProfileHeader({
-                    name: envInfo.active_profile,
-                    database: envInfo.active_database || 'postgres',
-                    host: 'localhost',
-                    port: 5432
-                });
-            }
         }
     } catch (err) {
         console.error("Error loading server info:", err);
@@ -269,20 +334,19 @@ function renderConfigSnippets() {
     }
 }
 
-async function copySnippet(elementId) {
+async function copySnippet(elementId, btn) {
     const codeEl = document.getElementById(elementId);
     if (!codeEl) return;
     const text = codeEl.textContent;
     try {
         await navigator.clipboard.writeText(text);
-        const btn = window.event ? window.event.currentTarget : null;
         if (btn) {
             const originalHTML = btn.innerHTML;
-            btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!`;
-            btn.classList.add('copied');
+            btn.innerHTML = `<svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!`;
+            btn.dataset.copied = 'true';
             setTimeout(() => {
                 btn.innerHTML = originalHTML;
-                btn.classList.remove('copied');
+                delete btn.dataset.copied;
             }, 2000);
         }
     } catch (err) {
@@ -293,27 +357,25 @@ async function copySnippet(elementId) {
 
 function setCategoryFilter(category) {
     currentCategory = category;
-    const pills = document.querySelectorAll('.cat-pill');
-    pills.forEach(p => {
-        if (p.textContent.toLowerCase().includes(category)) {
-            p.classList.add('active');
-        } else {
-            p.classList.remove('active');
-        }
+    document.querySelectorAll('.category-pills .fc-btn').forEach(p => {
+        p.setAttribute('aria-pressed', p.dataset.category === category ? 'true' : 'false');
     });
     filterTools();
 }
 
 function filterTools() {
     const query = (document.getElementById('toolFilter').value || '').toLowerCase().trim();
-    const cards = document.querySelectorAll('.tool-card');
-    cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        const cardCat = card.getAttribute('data-category');
-        const matchesCategory = (currentCategory === 'all' || cardCat === currentCategory);
+    const rows = document.querySelectorAll('#toolsList tr[data-category]');
+    let visible = 0;
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const rowCat = row.getAttribute('data-category');
+        const matchesCategory = (currentCategory === 'all' || rowCat === currentCategory);
         const matchesText = text.includes(query);
-        card.style.display = (matchesCategory && matchesText) ? 'flex' : 'none';
+        row.hidden = !(matchesCategory && matchesText);
+        if (!row.hidden) visible++;
     });
+    document.getElementById('toolsEmpty').hidden = visible > 0;
 }
 
 document.getElementById('profileForm').addEventListener('submit', async (e) => {
@@ -342,6 +404,7 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
     }
 });
 
+initTheme();
 initTabs();
 loadProfiles();
 loadEnvInfo();

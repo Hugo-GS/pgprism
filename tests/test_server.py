@@ -127,14 +127,22 @@ async def test_all_tools_have_readonly_annotations(storage_with_profile: Profile
 
 @pytest.mark.anyio
 async def test_resources_registered(storage_with_profile: ProfileStorage):
-    """Verify MCP resources are registered."""
+    """Verify standard MCP resources are registered."""
     server = create_server(storage=storage_with_profile)
     resources = await server.list_resources()
     resource_uris = [str(r.uri) for r in resources]
     assert "postgres://profiles" in resource_uris
     assert "postgres://schemas" in resource_uris
-    assert "ui://postgres/explain-viewer" in resource_uris
-    assert "ui://postgres/data-grid" in resource_uris
+    # ui:// resources are not present by default
+    assert "ui://postgres/explain-viewer" not in resource_uris
+    assert "ui://postgres/data-grid" not in resource_uris
+
+    # ui:// resources are registered when enable_ui=True
+    server_ui = create_server(storage=storage_with_profile, enable_ui=True)
+    resources_ui = await server_ui.list_resources()
+    resource_uris_ui = [str(r.uri) for r in resources_ui]
+    assert "ui://postgres/explain-viewer" in resource_uris_ui
+    assert "ui://postgres/data-grid" in resource_uris_ui
 
 
 @pytest.mark.anyio
@@ -294,16 +302,37 @@ async def test_search_profiles_tool(storage_with_profile: ProfileStorage):
 
 
 @pytest.mark.anyio
-async def test_server_advertises_ui_extension_capability(storage_with_profile: ProfileStorage):
-    """Verify io.modelcontextprotocol/ui extension capability is registered."""
+async def test_server_default_no_ui_extension_capability(storage_with_profile: ProfileStorage):
+    """Verify io.modelcontextprotocol/ui extension capability is NOT registered by default."""
     server = create_server(storage=storage_with_profile)
+    assert "io.modelcontextprotocol/ui" not in server._lowlevel_server.extensions
+
+
+@pytest.mark.anyio
+async def test_server_advertises_ui_extension_capability_when_enabled(storage_with_profile: ProfileStorage):
+    """Verify io.modelcontextprotocol/ui extension capability is registered when enable_ui=True."""
+    server = create_server(storage=storage_with_profile, enable_ui=True)
     assert "io.modelcontextprotocol/ui" in server._lowlevel_server.extensions
 
 
 @pytest.mark.anyio
-async def test_tools_have_mcp_ui_metadata(storage_with_profile: ProfileStorage):
-    """Verify explain_query and read_query expose standard MCP Apps UI resource metadata."""
+async def test_tools_default_no_mcp_ui_metadata(storage_with_profile: ProfileStorage):
+    """Verify explain_query and read_query do NOT expose UI metadata by default."""
     server = create_server(storage=storage_with_profile)
+    tools = await server.list_tools()
+    tool_map = {t.name: t for t in tools}
+
+    assert "explain_query" in tool_map
+    assert tool_map["explain_query"].meta is None
+
+    assert "read_query" in tool_map
+    assert tool_map["read_query"].meta is None
+
+
+@pytest.mark.anyio
+async def test_tools_have_mcp_ui_metadata_when_enabled(storage_with_profile: ProfileStorage):
+    """Verify explain_query and read_query expose standard MCP Apps UI resource metadata when enable_ui=True."""
+    server = create_server(storage=storage_with_profile, enable_ui=True)
     tools = await server.list_tools()
     tool_map = {t.name: t for t in tools}
 
@@ -319,10 +348,29 @@ async def test_tools_have_mcp_ui_metadata(storage_with_profile: ProfileStorage):
 
 
 @pytest.mark.anyio
+async def test_server_respects_env_var_for_ui(storage_with_profile: ProfileStorage, monkeypatch: pytest.MonkeyPatch):
+    """Verify PGPRISM_ENABLE_UI env var toggles UI extension."""
+    monkeypatch.setenv("PGPRISM_ENABLE_UI", "1")
+    server_enabled = create_server(storage=storage_with_profile)
+    assert "io.modelcontextprotocol/ui" in server_enabled._lowlevel_server.extensions
+
+    monkeypatch.setenv("PGPRISM_ENABLE_UI", "0")
+    server_disabled = create_server(storage=storage_with_profile)
+    assert "io.modelcontextprotocol/ui" not in server_disabled._lowlevel_server.extensions
+
+
+@pytest.mark.anyio
 async def test_ui_resources_read_contents_and_mime_type(storage_with_profile: ProfileStorage):
-    """Verify ui:// resources can be read, return HTML content, and have MIME type text/html;profile=mcp-app."""
+    """Verify ui:// resources can be read when enabled, and default server has no ui:// resources."""
     from mcp.server.apps import APP_MIME_TYPE
-    server = create_server(storage=storage_with_profile)
+
+    # Default server has no ui:// resources
+    server_default = create_server(storage=storage_with_profile)
+    resources_default = await server_default.list_resources()
+    assert not any(str(r.uri).startswith("ui://") for r in resources_default)
+
+    # Server with enable_ui=True exposes ui:// resources
+    server = create_server(storage=storage_with_profile, enable_ui=True)
 
     resources = await server.list_resources()
     res_map = {str(r.uri): r for r in resources}

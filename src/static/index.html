@@ -1,536 +1,507 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-accent="cyan" data-density="comfortable">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#101112">
     <title>PgPrism - Configuration & Documentation</title>
+    <script>
+        try {
+            const savedTheme = localStorage.getItem('pgprism-theme');
+            if (savedTheme === 'light' || savedTheme === 'dark') {
+                document.documentElement.dataset.theme = savedTheme;
+            }
+        } catch (e) {}
+    </script>
+    <link rel="stylesheet" href="/static/tokens.css">
+    <link rel="stylesheet" href="/static/components.css">
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/app.js" defer></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="header-left">
-                <div class="header-brand">
-                    <h1>PgPrism</h1>
-                    <span class="tag">read-only</span>
-                </div>
-                <div class="header-context" id="headerContext">
-                    <span class="context-key">target:</span>
-                    <span class="context-val" id="headerContextVal">none</span>
+    <div class="fc-shell">
+        <header class="fc-app-header">
+            <div class="fc-brand">
+                <div class="fc-brand-icon" aria-hidden="true">PG</div>
+                <div>
+                    <div class="fc-brand-name">PgPrism</div>
+                    <div class="fc-brand-descriptor">CONFIGURATION</div>
                 </div>
             </div>
-
-            <nav class="nav-tabs">
-                <button class="nav-tab active" data-tab="profiles" id="tabBtn-profiles">Profiles</button>
-                <button class="nav-tab" data-tab="connection" id="tabBtn-connection">Connection Guide</button>
-                <button class="nav-tab" data-tab="docs" id="tabBtn-docs">MCP Reference</button>
-            </nav>
+            <div class="header-actions">
+                <div class="header-context" id="headerContext">
+                    <span class="fc-faint">target</span>
+                    <span class="fc-mono" id="headerContextVal">none</span>
+                </div>
+                <button class="fc-btn" id="themeToggle" type="button" aria-label="Toggle color theme">
+                    <span aria-hidden="true">◐</span> <span id="themeLabel">Light mode</span>
+                </button>
+            </div>
         </header>
 
-        <div id="alertBox"></div>
+        <div class="fc-layout">
+            <nav class="fc-sidebar" aria-label="Main sections">
+                <div class="fc-sidebar-group">Configuration</div>
+                <button class="fc-nav" type="button" data-tab="profiles" id="tabBtn-profiles" aria-current="page">
+                    <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+                    Profiles
+                </button>
+                <button class="fc-nav" type="button" data-tab="connection" id="tabBtn-connection">
+                    <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H6a5 5 0 0 0 0 10h3M15 7h3a5 5 0 0 1 0 10h-3M8 12h8"/></svg>
+                    Connection Guide
+                </button>
+                <div class="fc-sidebar-group" style="margin-top: 27px">Reference</div>
+                <button class="fc-nav" type="button" data-tab="docs" id="tabBtn-docs">
+                    <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M10 10v10"/></svg>
+                    MCP Reference
+                </button>
+            </nav>
 
-        <!-- ================= TAB 1: PROFILES ================= -->
-        <div id="tab-profiles" class="tab-content active">
-            <div class="grid">
-                <!-- Left Form -->
-                <section>
-                    <h2>New Profile</h2>
-                    <form id="profileForm">
-                        <div class="field">
-                            <label>Profile Name</label>
-                            <input id="name" required placeholder="local-dev" autocomplete="off">
-                        </div>
+            <main class="fc-main">
+                <!-- ================= TAB 1: PROFILES ================= -->
+                <div id="tab-profiles" class="tab-content">
+                    <div class="page-intro">
+                        <div class="fc-eyebrow">CONFIGURATION / 01</div>
+                        <h1 class="fc-title">Profiles</h1>
+                    </div>
 
-                        <div class="field field-row">
-                            <div>
-                                <label>Host</label>
-                                <input id="host" value="localhost" autocomplete="off">
+                    <section aria-labelledby="profilesTitle">
+                        <div class="fc-panel">
+                            <div class="fc-panel-header">
+                                <h2 class="fc-section-title" id="profilesTitle">Configured Profiles (SQLite)</h2>
+                                <span class="fc-faint fc-text-xs" id="profilesCount" aria-live="polite"></span>
                             </div>
-                            <div>
-                                <label>Port</label>
-                                <input id="port" type="number" value="5432">
+                            <div class="fc-table-tools">
+                                <label class="fc-input-group fc-search">
+                                    <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
+                                    <input type="search" id="profileSearchInput" placeholder="Filter profiles by name, host, db..." aria-label="Filter profiles" oninput="handleProfileSearch(this.value)" autocomplete="off">
+                                </label>
+                            </div>
+                            <div class="fc-table-wrap" role="region" aria-label="Configured profiles" tabindex="0">
+                                <table class="fc-table" aria-labelledby="profilesTitle">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Profile</th>
+                                            <th scope="col">Connection</th>
+                                            <th scope="col">SSL</th>
+                                            <th scope="col" class="num">Timeout</th>
+                                            <th scope="col">Status</th>
+                                            <th scope="col" class="actions-col"><span class="fc-sr-only">Actions</span></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="profilesList">
+                                        <tr><td colspan="6" class="fc-empty">Loading profiles...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
+                    </section>
 
-                        <div class="field">
-                            <label>Database (Optional)</label>
-                            <input id="database" placeholder="postgres (default)" autocomplete="off">
+                    <section aria-labelledby="newProfileTitle">
+                        <div class="fc-section-header">
+                            <div>
+                                <h2 class="fc-section-title" id="newProfileTitle">New Profile</h2>
+                            </div>
                         </div>
-
-                        <div class="field">
-                            <label>Username</label>
-                            <input id="username" required placeholder="postgres" autocomplete="off">
+                        <div class="fc-panel">
+                            <form id="profileForm">
+                                <div class="fc-panel-body">
+                                    <div class="fc-form-grid">
+                                        <div>
+                                            <label class="fc-field-label" for="name">Profile Name</label>
+                                            <input class="fc-input" id="name" required placeholder="local-dev" autocomplete="off">
+                                        </div>
+                                        <div class="field-row">
+                                            <div>
+                                                <label class="fc-field-label" for="host">Host</label>
+                                                <input class="fc-input" id="host" value="localhost" autocomplete="off">
+                                            </div>
+                                            <div>
+                                                <label class="fc-field-label" for="port">Port</label>
+                                                <input class="fc-input fc-mono" id="port" type="number" value="5432">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="fc-field-label" for="database">Database (Optional)</label>
+                                            <input class="fc-input" id="database" placeholder="postgres (default)" autocomplete="off">
+                                        </div>
+                                        <div>
+                                            <label class="fc-field-label" for="username">Username</label>
+                                            <input class="fc-input" id="username" required placeholder="postgres" autocomplete="off">
+                                        </div>
+                                        <div>
+                                            <label class="fc-field-label" for="password">Password</label>
+                                            <input class="fc-input" id="password" type="password" placeholder="••••••••">
+                                            <small class="fc-field-hint">Saved to the OS secret store, never to SQLite.</small>
+                                        </div>
+                                        <div>
+                                            <label class="fc-field-label" for="sslmode">SSL Mode</label>
+                                            <select class="fc-select" id="sslmode">
+                                                <option value="prefer">prefer</option>
+                                                <option value="require">require</option>
+                                                <option value="disable">disable</option>
+                                                <option value="allow">allow</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="fc-field-label" for="statement-timeout">Statement Timeout (ms)</label>
+                                            <input class="fc-input fc-mono" type="number" id="statement-timeout" value="30000" min="1000" max="300000" step="1000">
+                                            <small class="fc-field-hint">Between 1,000 and 300,000 ms.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="fc-panel-footer">
+                                    <span class="fc-faint fc-text-xs">Connections are always read-only.</span>
+                                    <div class="button-row">
+                                        <button type="button" onclick="testConnection()" class="fc-btn">Test</button>
+                                        <button type="submit" class="fc-btn fc-btn-primary">Save Profile</button>
+                                    </div>
+                                </div>
+                            </form>
                         </div>
+                    </section>
+                </div>
 
-                        <div class="field">
-                            <label>Password</label>
-                            <input id="password" type="password" placeholder="••••••••">
-                        </div>
-
-                        <div class="field">
-                            <label>SSL Mode</label>
-                            <select id="sslmode">
-                                <option value="prefer">prefer</option>
-                                <option value="require">require</option>
-                                <option value="disable">disable</option>
-                                <option value="allow">allow</option>
-                            </select>
-                        </div>
-
-                        <div class="field">
-                            <label for="statement-timeout">Statement Timeout (ms)</label>
-                            <input type="number" id="statement-timeout" value="30000" min="1000" max="300000" step="1000">
-                        </div>
-
-                        <div class="btn-group">
-                            <button type="button" onclick="testConnection()" class="btn-secondary">Test</button>
-                            <button type="submit" class="btn-primary">Save Profile</button>
-                        </div>
-                    </form>
-                </section>
-
-                <!-- Right Profile List -->
-                <section>
-                    <h2>Configured Profiles (SQLite)</h2>
-                    <div style="margin-bottom: 0.75rem;">
-                        <input type="text" id="profileSearchInput" placeholder="Filter profiles by name, host, db..." oninput="handleProfileSearch(this.value)" autocomplete="off">
+                <!-- ================= TAB 2: CONNECTION GUIDE ================= -->
+                <div id="tab-connection" class="tab-content" hidden>
+                    <div class="page-intro">
+                        <div class="fc-eyebrow">CONFIGURATION / 02</div>
+                        <h1 class="fc-title">Connection Guide</h1>
+                        <p class="page-lead">
+                            Communicates via stdio. AI clients launch the local Python process and resolve saved passwords from the OS secret store.
+                        </p>
                     </div>
-                    <div id="profilesList">
-                        <div class="empty-state">Loading profiles...</div>
+
+                    <div class="fc-panel active-target" id="activeProfileBanner">
+                        <span class="active-target-label">Active profile</span>
+                        <span class="active-target-value" id="activeProfileText">none</span>
+                        <span class="fc-badge fc-badge-warning" id="activeProfileStatus">Not set</span>
                     </div>
-                </section>
-            </div>
+
+                    <section aria-labelledby="clientConfigTitle">
+                        <div class="fc-section-header">
+                            <div>
+                                <h2 class="fc-section-title" id="clientConfigTitle">Client configuration</h2>
+                                <div class="section-caption">Paste the snippet into your MCP client's configuration file.</div>
+                            </div>
+                        </div>
+                        <div class="fc-panel">
+                            <div class="fc-tabs client-tabs" role="tablist" aria-label="MCP clients">
+                                <button class="fc-tab" type="button" role="tab" aria-selected="true" aria-controls="config-claude" onclick="switchClientConfig('claude', this)">Claude Desktop</button>
+                                <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-cursor" onclick="switchClientConfig('cursor', this)">Cursor</button>
+                                <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-antigravity" onclick="switchClientConfig('antigravity', this)">Antigravity</button>
+                                <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-vscode" onclick="switchClientConfig('vscode', this)">VS Code / Cline</button>
+                                <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-cli" onclick="switchClientConfig('cli', this)">Direct CLI</button>
+                            </div>
+
+                            <!-- Claude Desktop Config -->
+                            <div id="config-claude" class="fc-panel-body config-pane" role="tabpanel">
+                                <div class="pane-header">
+                                    <div>
+                                        <h3 class="fc-section-title">Claude Desktop</h3>
+                                        <div class="config-target-path">~/.config/Claude/claude_desktop_config.json</div>
+                                    </div>
+                                    <button class="fc-btn" type="button" onclick="copySnippet('snippet-claude', this)">
+                                        <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        Copy JSON
+                                    </button>
+                                </div>
+                                <pre class="fc-code code-box"><code id="snippet-claude">...</code></pre>
+                            </div>
+
+                            <!-- Cursor Config -->
+                            <div id="config-cursor" class="fc-panel-body config-pane" role="tabpanel" hidden>
+                                <div class="pane-header">
+                                    <div>
+                                        <h3 class="fc-section-title">Cursor</h3>
+                                        <div class="config-target-path">.cursor/mcp.json</div>
+                                    </div>
+                                    <button class="fc-btn" type="button" onclick="copySnippet('snippet-cursor', this)">
+                                        <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        Copy JSON
+                                    </button>
+                                </div>
+                                <pre class="fc-code code-box"><code id="snippet-cursor">...</code></pre>
+                            </div>
+
+                            <!-- Antigravity Config -->
+                            <div id="config-antigravity" class="fc-panel-body config-pane" role="tabpanel" hidden>
+                                <div class="pane-header">
+                                    <div>
+                                        <h3 class="fc-section-title">Antigravity</h3>
+                                        <div class="config-target-path">~/.gemini/antigravity/mcp/postgresql.json</div>
+                                    </div>
+                                    <button class="fc-btn" type="button" onclick="copySnippet('snippet-antigravity', this)">
+                                        <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        Copy JSON
+                                    </button>
+                                </div>
+                                <pre class="fc-code code-box"><code id="snippet-antigravity">...</code></pre>
+                            </div>
+
+                            <!-- VS Code / Cline Config -->
+                            <div id="config-vscode" class="fc-panel-body config-pane" role="tabpanel" hidden>
+                                <div class="pane-header">
+                                    <div>
+                                        <h3 class="fc-section-title">VS Code / Cline / Roo Code</h3>
+                                        <div class="config-target-path">cline_mcp_settings.json</div>
+                                    </div>
+                                    <button class="fc-btn" type="button" onclick="copySnippet('snippet-vscode', this)">
+                                        <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        Copy JSON
+                                    </button>
+                                </div>
+                                <pre class="fc-code code-box"><code id="snippet-vscode">...</code></pre>
+                            </div>
+
+                            <!-- Direct CLI Config -->
+                            <div id="config-cli" class="fc-panel-body config-pane" role="tabpanel" hidden>
+                                <div class="pane-header">
+                                    <div>
+                                        <h3 class="fc-section-title">Direct Python stdio Execution</h3>
+                                        <div class="config-target-path">Terminal test command</div>
+                                    </div>
+                                    <button class="fc-btn" type="button" onclick="copySnippet('snippet-cli', this)">
+                                        <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        Copy Command
+                                    </button>
+                                </div>
+                                <pre class="fc-code code-box"><code id="snippet-cli">...</code></pre>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- ================= TAB 3: MCP REFERENCE ================= -->
+                <div id="tab-docs" class="tab-content" hidden>
+                    <div class="page-intro">
+                        <div class="fc-eyebrow">REFERENCE / 01</div>
+                        <h1 class="fc-title">MCP Reference</h1>
+                        <p class="page-lead">
+                            Strict read-only tools, browsable schema resources, and diagnostic prompts.
+                        </p>
+                    </div>
+
+                    <section aria-labelledby="defenseTitle">
+                        <div class="fc-section-header" style="margin-top: 0">
+                            <div>
+                                <h2 class="fc-section-title" id="defenseTitle">Strict Read-Only Defense in Depth</h2>
+                                <div class="section-caption">Three independent layers; any one of them blocks writes.</div>
+                            </div>
+                        </div>
+                        <div class="step-grid step-grid-3">
+                            <article class="fc-panel step-card">
+                                <div class="fc-eyebrow">01 / AST Parser Layer</div>
+                                <p>Queries parsed via <code>sqlglot</code>. Rejects any mutation (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>DROP</code>, <code>ALTER</code>, <code>TRUNCATE</code>, <code>MERGE</code>, write CTEs, procedures) before reaching the database.</p>
+                            </article>
+                            <article class="fc-panel step-card">
+                                <div class="fc-eyebrow">02 / Engine Session Layer</div>
+                                <p>PostgreSQL sessions enforce <code>SET default_transaction_read_only = on</code> and execute inside explicit read-only transactions at the engine level.</p>
+                            </article>
+                            <article class="fc-panel step-card">
+                                <div class="fc-eyebrow">03 / Statement Timeout Guard</div>
+                                <p>Configurable <code>statement_timeout_ms</code> (default: 30s) prevents runaway queries from locking database connections.</p>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section aria-labelledby="toolsTitle">
+                        <div class="fc-section-header">
+                            <div>
+                                <h2 class="fc-section-title" id="toolsTitle">MCP Tools</h2>
+                                <div class="section-caption">All tools operate under strict read-only enforcement.</div>
+                            </div>
+                        </div>
+                        <div class="fc-panel">
+                            <div class="fc-table-tools">
+                                <div class="category-pills" role="group" aria-label="Filter by category">
+                                    <button class="fc-btn" type="button" data-category="all" aria-pressed="true" onclick="setCategoryFilter('all')">All (18)</button>
+                                    <button class="fc-btn" type="button" data-category="query" aria-pressed="false" onclick="setCategoryFilter('query')">Query (2)</button>
+                                    <button class="fc-btn" type="button" data-category="schema" aria-pressed="false" onclick="setCategoryFilter('schema')">Schema (8)</button>
+                                    <button class="fc-btn" type="button" data-category="diagnostic" aria-pressed="false" onclick="setCategoryFilter('diagnostic')">Diagnostics (4)</button>
+                                    <button class="fc-btn" type="button" data-category="profile" aria-pressed="false" onclick="setCategoryFilter('profile')">Profiles (4)</button>
+                                </div>
+                                <div class="fc-grow"></div>
+                                <label class="fc-input-group fc-search">
+                                    <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
+                                    <input type="search" id="toolFilter" placeholder="Filter tools..." aria-label="Filter tools" oninput="filterTools()" autocomplete="off">
+                                </label>
+                            </div>
+                            <div class="fc-table-wrap" role="region" aria-label="MCP tools" tabindex="0">
+                                <table class="fc-table tools-table" aria-labelledby="toolsTitle">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Tool</th>
+                                            <th scope="col">Description</th>
+                                            <th scope="col">Arguments</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="toolsList">
+                                        <tr data-category="query">
+                                            <td><div class="tool-name">read_query</div><div class="tool-example">"Query the 10 most recent orders and total amounts."</div></td>
+                                            <td>Executes a read-only query and returns tabular rows.</td>
+                                            <td class="tool-params"><code>query: str</code><br><code>max_rows: int = 100</code> (1-1000)</td>
+                                        </tr>
+                                        <tr data-category="query">
+                                            <td><div class="tool-name">explain_query</div><div class="tool-example">"Analyze why queries on the customers table are slow."</div></td>
+                                            <td>Returns the EXPLAIN execution plan. analyze=True measures runtime timings.</td>
+                                            <td class="tool-params"><code>query: str</code><br><code>analyze: bool = False</code></td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">list_databases</div><div class="tool-example">"What databases exist on this PostgreSQL instance?"</div></td>
+                                            <td>Lists accessible databases in cluster.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">select_database</div><div class="tool-example">"Switch active database to analytics_dw."</div></td>
+                                            <td>Switches target database and reinitializes pool.</td>
+                                            <td class="tool-params"><code>database_name: str</code></td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">list_schemas</div><div class="tool-example">"List all schemas in the active database."</div></td>
+                                            <td>Lists user schemas in database.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">list_tables</div><div class="tool-example">"Show all tables in the public schema."</div></td>
+                                            <td>Lists tables and views in schema.</td>
+                                            <td class="tool-params"><code>schema: str = "public"</code></td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">describe_table</div><div class="tool-example">"Describe columns and types for users table."</div></td>
+                                            <td>Returns columns, types, nullability, defaults, and primary keys.</td>
+                                            <td class="tool-params"><code>table: str</code><br><code>schema: str = "public"</code></td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">list_indexes</div><div class="tool-example">"Check existing indexes on the payments table."</div></td>
+                                            <td>Lists indexes and DDL definitions on table.</td>
+                                            <td class="tool-params"><code>table: str</code><br><code>schema: str = "public"</code></td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">list_foreign_keys</div><div class="tool-example">"Show foreign keys connecting to order_items."</div></td>
+                                            <td>Lists foreign key relationships and target columns.</td>
+                                            <td class="tool-params"><code>table: str</code><br><code>schema: str = "public"</code></td>
+                                        </tr>
+                                        <tr data-category="schema">
+                                            <td><div class="tool-name">list_constraints</div><div class="tool-example">"What constraints are defined on user_accounts?"</div></td>
+                                            <td>Lists CHECK, UNIQUE, and EXCLUDE constraints.</td>
+                                            <td class="tool-params"><code>table: str</code><br><code>schema: str = "public"</code></td>
+                                        </tr>
+                                        <tr data-category="diagnostic">
+                                            <td><div class="tool-name">test_connection</div><div class="tool-example">"Test database connection and show PostgreSQL version."</div></td>
+                                            <td>Verifies connectivity to active database and returns PostgreSQL server version.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="diagnostic">
+                                            <td><div class="tool-name">table_stats</div><div class="tool-example">"Check for dead tuples or vacuum needs on audit_logs."</div></td>
+                                            <td>Returns live/dead tuples, vacuum history, and scan metrics.</td>
+                                            <td class="tool-params"><code>table: str</code><br><code>schema: str = "public"</code></td>
+                                        </tr>
+                                        <tr data-category="diagnostic">
+                                            <td><div class="tool-name">running_queries</div><div class="tool-example">"Show currently executing queries and wait states."</div></td>
+                                            <td>Shows active queries, elapsed runtimes, and wait events.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="diagnostic">
+                                            <td><div class="tool-name">database_size</div><div class="tool-example">"What are the largest tables and indexes in this database?"</div></td>
+                                            <td>Returns database disk size and top relation sizes.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="profile">
+                                            <td><div class="tool-name">get_active_profile</div><div class="tool-example">"What database profile is currently loaded?"</div></td>
+                                            <td>Returns active profile metadata with masked password.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="profile">
+                                            <td><div class="tool-name">list_profiles</div><div class="tool-example">"List available database profiles."</div></td>
+                                            <td>Lists configured profiles from SQLite.</td>
+                                            <td class="tool-params fc-faint">—</td>
+                                        </tr>
+                                        <tr data-category="profile">
+                                            <td><div class="tool-name">search_profiles</div><div class="tool-example">"Search for analytics or production profiles."</div></td>
+                                            <td>Searches stored profiles by partial match on name, host, or database.</td>
+                                            <td class="tool-params"><code>query: str</code></td>
+                                        </tr>
+                                        <tr data-category="profile">
+                                            <td><div class="tool-name">switch_profile</div><div class="tool-example">"Switch connection profile to staging."</div></td>
+                                            <td>Switches active connection profile by name.</td>
+                                            <td class="tool-params"><code>profile_name: str</code></td>
+                                        </tr>
+                                        <tr id="toolsEmpty" hidden>
+                                            <td colspan="3" class="fc-empty"><strong>No matching tools</strong>Try another category or search term.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Resources and Prompts -->
+                    <div class="fc-split reference-columns">
+                        <section class="fc-panel" aria-labelledby="resourcesTitle">
+                            <div class="fc-panel-header">
+                                <div>
+                                    <h3 class="fc-section-title" id="resourcesTitle">MCP Resources</h3>
+                                    <div class="section-caption">URI templates for inspection without tool execution.</div>
+                                </div>
+                            </div>
+                            <ul class="fc-panel-body ref-list">
+                                <li class="ref-item">
+                                    <code>postgres://profiles</code>
+                                    <div class="ref-desc">Stored connection profiles and active status.</div>
+                                </li>
+                                <li class="ref-item">
+                                    <code>postgres://schemas</code>
+                                    <div class="ref-desc">User schemas in the active database.</div>
+                                </li>
+                                <li class="ref-item">
+                                    <code>postgres://schemas/{schema}/tables</code>
+                                    <div class="ref-desc">Tables and views within the specified schema.</div>
+                                </li>
+                                <li class="ref-item">
+                                    <code>postgres://schemas/{schema}/tables/{table}</code>
+                                    <div class="ref-desc">Column types, nullability, and primary keys.</div>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section class="fc-panel" aria-labelledby="promptsTitle">
+                            <div class="fc-panel-header">
+                                <div>
+                                    <h3 class="fc-section-title" id="promptsTitle">MCP Guided Prompts</h3>
+                                    <div class="section-caption">Multi-step diagnostic prompt workflows.</div>
+                                </div>
+                            </div>
+                            <ul class="fc-panel-body ref-list">
+                                <li class="ref-item">
+                                    <code>debug_slow_query(query)</code>
+                                    <div class="ref-desc">Runs EXPLAIN ANALYZE, checks indexes, and suggests plan fixes.</div>
+                                </li>
+                                <li class="ref-item">
+                                    <code>explore_table(table, schema)</code>
+                                    <div class="ref-desc">Surfaces schema, constraints, statistics, and sample rows.</div>
+                                </li>
+                                <li class="ref-item">
+                                    <code>find_data_issues(table, schema)</code>
+                                    <div class="ref-desc">Checks for NULL spikes, duplicates, and broken foreign keys.</div>
+                                </li>
+                            </ul>
+                        </section>
+                    </div>
+                </div>
+            </main>
         </div>
+    </div>
 
-        <!-- ================= TAB 2: CONNECTION GUIDE ================= -->
-        <div id="tab-connection" class="tab-content" style="display:none">
-            <div class="guide-header">
-                <h2>Connection Guide</h2>
-                <p class="guide-subtitle">
-                    Communicates via stdio. AI clients launch the local Python process and resolve saved passwords from the OS secret store.
-                </p>
-                <div class="target-callout" id="activeProfileBanner">
-                    <span class="context-key">active profile:</span>
-                    <span id="activeProfileText" class="context-val">none</span>
-                </div>
-            </div>
-
-            <div class="client-tabs">
-                <button class="client-tab active" onclick="switchClientConfig('claude')">Claude Desktop</button>
-                <button class="client-tab" onclick="switchClientConfig('cursor')">Cursor</button>
-                <button class="client-tab" onclick="switchClientConfig('antigravity')">Antigravity</button>
-                <button class="client-tab" onclick="switchClientConfig('vscode')">VS Code / Cline</button>
-                <button class="client-tab" onclick="switchClientConfig('cli')">Direct CLI</button>
-            </div>
-
-            <!-- Claude Desktop Config -->
-            <div id="config-claude" class="config-pane active">
-                <div class="pane-header">
-                    <div>
-                        <div class="config-target-title">Claude Desktop</div>
-                        <div class="config-target-path">~/.config/Claude/claude_desktop_config.json</div>
-                    </div>
-                    <button class="btn-copy" onclick="copySnippet('snippet-claude')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                        Copy JSON
-                    </button>
-                </div>
-                <pre class="code-box"><code id="snippet-claude">...</code></pre>
-            </div>
-
-            <!-- Cursor Config -->
-            <div id="config-cursor" class="config-pane" style="display:none">
-                <div class="pane-header">
-                    <div>
-                        <div class="config-target-title">Cursor</div>
-                        <div class="config-target-path">.cursor/mcp.json</div>
-                    </div>
-                    <button class="btn-copy" onclick="copySnippet('snippet-cursor')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                        Copy JSON
-                    </button>
-                </div>
-                <pre class="code-box"><code id="snippet-cursor">...</code></pre>
-            </div>
-
-            <!-- Antigravity Config -->
-            <div id="config-antigravity" class="config-pane" style="display:none">
-                <div class="pane-header">
-                    <div>
-                        <div class="config-target-title">Antigravity</div>
-                        <div class="config-target-path">~/.gemini/antigravity/mcp/postgresql.json</div>
-                    </div>
-                    <button class="btn-copy" onclick="copySnippet('snippet-antigravity')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                        Copy JSON
-                    </button>
-                </div>
-                <pre class="code-box"><code id="snippet-antigravity">...</code></pre>
-            </div>
-
-            <!-- VS Code / Cline Config -->
-            <div id="config-vscode" class="config-pane" style="display:none">
-                <div class="pane-header">
-                    <div>
-                        <div class="config-target-title">VS Code / Cline / Roo Code</div>
-                        <div class="config-target-path">cline_mcp_settings.json</div>
-                    </div>
-                    <button class="btn-copy" onclick="copySnippet('snippet-vscode')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                        Copy JSON
-                    </button>
-                </div>
-                <pre class="code-box"><code id="snippet-vscode">...</code></pre>
-            </div>
-
-            <!-- Direct CLI Config -->
-            <div id="config-cli" class="config-pane" style="display:none">
-                <div class="pane-header">
-                    <div>
-                        <div class="config-target-title">Direct Python stdio Execution</div>
-                        <div class="config-target-path">Terminal test command</div>
-                    </div>
-                    <button class="btn-copy" onclick="copySnippet('snippet-cli')">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                        Copy Command
-                    </button>
-                </div>
-                <pre class="code-box"><code id="snippet-cli">...</code></pre>
-            </div>
-
-            <div class="flow-container">
-                <div class="flow-title">Execution Flow</div>
-                <div class="flow-steps">
-                    <div class="flow-step">
-                        <div class="flow-step-num">01 / Store Profile</div>
-                        <div class="flow-step-text">Credentials saved in <code>~/.config/pgprism/profiles.db</code>.</div>
-                    </div>
-                    <div class="flow-step">
-                        <div class="flow-step-num">02 / Spawn Process</div>
-                        <div class="flow-step-text">Client launches <code>python -m src.server</code> over stdio.</div>
-                    </div>
-                    <div class="flow-step">
-                        <div class="flow-step-num">03 / Pool Init</div>
-                        <div class="flow-step-text">Connection pool starts with <code>default_transaction_read_only=on</code>.</div>
-                    </div>
-                    <div class="flow-step">
-                        <div class="flow-step-num">04 / Safe Query</div>
-                        <div class="flow-step-text">Queries verified by AST parser before PostgreSQL execution.</div>
-                    </div>
-                </div>
-            </div>
+    <div class="fc-toast" id="alertBox" role="status" aria-live="polite" hidden>
+        <div class="fc-toast-body">
+            <span class="fc-toast-msg" id="alertMsg"></span>
+            <button class="fc-toast-copy" id="alertCopy" type="button" title="Copy to clipboard" aria-label="Copy error to clipboard">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5"/><path d="M5.5 10.5h-1a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            <button class="fc-toast-close" id="alertClose" type="button" title="Dismiss" aria-label="Dismiss notification">✕</button>
         </div>
-
-        <!-- ================= TAB 3: MCP REFERENCE ================= -->
-        <div id="tab-docs" class="tab-content" style="display:none">
-            <div class="docs-header">
-                <h2>MCP Reference</h2>
-                <p class="guide-subtitle">
-                    Strict read-only tools, browsable schema resources, and diagnostic prompts.
-                </p>
-            </div>
-
-            <!-- Defense in depth box -->
-            <div class="defense-box">
-                <div class="defense-title">Strict Read-Only Defense in Depth</div>
-                <div class="defense-grid">
-                    <div class="defense-card">
-                        <span class="defense-step">01 / AST Parser Layer</span>
-                        <p>Queries parsed via <code>sqlglot</code>. Rejects any mutation (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>DROP</code>, <code>ALTER</code>, <code>TRUNCATE</code>, <code>MERGE</code>, write CTEs, procedures) before reaching the database.</p>
-                    </div>
-                    <div class="defense-card">
-                        <span class="defense-step">02 / Engine Session Layer</span>
-                        <p>PostgreSQL sessions enforce <code>SET default_transaction_read_only = on</code> and execute inside explicit read-only transactions at the engine level.</p>
-                    </div>
-                    <div class="defense-card">
-                        <span class="defense-step">03 / Statement Timeout Guard</span>
-                        <p>Configurable <code>statement_timeout_ms</code> (default: 30s) prevents runaway queries from locking database connections.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Filter bar -->
-            <div class="filter-bar">
-                <div class="category-pills">
-                    <button class="cat-pill active" onclick="setCategoryFilter('all')">All (18)</button>
-                    <button class="cat-pill" onclick="setCategoryFilter('query')">Query (2)</button>
-                    <button class="cat-pill" onclick="setCategoryFilter('schema')">Schema (8)</button>
-                    <button class="cat-pill" onclick="setCategoryFilter('diagnostic')">Diagnostics (4)</button>
-                    <button class="cat-pill" onclick="setCategoryFilter('profile')">Profiles (4)</button>
-                </div>
-                <div class="search-wrapper">
-                    <input type="text" id="toolFilter" placeholder="Filter tools..." oninput="filterTools()" autocomplete="off">
-                </div>
-            </div>
-
-            <!-- Tools list -->
-            <div class="tools-grid" id="toolsList">
-                <!-- read_query -->
-                <div class="tool-card" data-category="query">
-                    <div class="tool-card-header">
-                        <span class="tool-name">read_query(query, max_rows=100)</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Executes a read-only query and returns tabular rows.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>query: str</code> &middot; <code>max_rows: int = 100</code> (1-1000)
-                    </div>
-                    <div class="tool-example">&gt; "Query the 10 most recent orders and total amounts."</div>
-                </div>
-
-                <!-- explain_query -->
-                <div class="tool-card" data-category="query">
-                    <div class="tool-card-header">
-                        <span class="tool-name">explain_query(query, analyze=False)</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Returns the EXPLAIN execution plan. analyze=True measures runtime timings.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>query: str</code> &middot; <code>analyze: bool = False</code>
-                    </div>
-                    <div class="tool-example">&gt; "Analyze why queries on the customers table are slow."</div>
-                </div>
-
-                <!-- list_databases -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_databases()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists accessible databases in cluster.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "What databases exist on this PostgreSQL instance?"</div>
-                </div>
-
-                <!-- select_database -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">select_database(database_name)</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Switches target database and reinitializes pool.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>database_name: str</code>
-                    </div>
-                    <div class="tool-example">&gt; "Switch active database to analytics_dw."</div>
-                </div>
-
-                <!-- list_schemas -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_schemas()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists user schemas in database.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "List all schemas in the active database."</div>
-                </div>
-
-                <!-- list_tables -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_tables(schema="public")</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists tables and views in schema.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>schema: str = "public"</code>
-                    </div>
-                    <div class="tool-example">&gt; "Show all tables in the public schema."</div>
-                </div>
-
-                <!-- describe_table -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">describe_table(table, schema="public")</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Returns columns, types, nullability, defaults, and primary keys.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>table: str</code> &middot; <code>schema: str = "public"</code>
-                    </div>
-                    <div class="tool-example">&gt; "Describe columns and types for users table."</div>
-                </div>
-
-                <!-- list_indexes -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_indexes(table, schema="public")</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists indexes and DDL definitions on table.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>table: str</code> &middot; <code>schema: str = "public"</code>
-                    </div>
-                    <div class="tool-example">&gt; "Check existing indexes on the payments table."</div>
-                </div>
-
-                <!-- list_foreign_keys -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_foreign_keys(table, schema="public")</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists foreign key relationships and target columns.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>table: str</code> &middot; <code>schema: str = "public"</code>
-                    </div>
-                    <div class="tool-example">&gt; "Show foreign keys connecting to order_items."</div>
-                </div>
-
-                <!-- list_constraints -->
-                <div class="tool-card" data-category="schema">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_constraints(table, schema="public")</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists CHECK, UNIQUE, and EXCLUDE constraints.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>table: str</code> &middot; <code>schema: str = "public"</code>
-                    </div>
-                    <div class="tool-example">&gt; "What constraints are defined on user_accounts?"</div>
-                </div>
-
-                <!-- test_connection -->
-                <div class="tool-card" data-category="diagnostic">
-                    <div class="tool-card-header">
-                        <span class="tool-name">test_connection()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Verifies connectivity to active database and returns PostgreSQL server version.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "Test database connection and show PostgreSQL version."</div>
-                </div>
-
-                <!-- table_stats -->
-                <div class="tool-card" data-category="diagnostic">
-                    <div class="tool-card-header">
-                        <span class="tool-name">table_stats(table, schema="public")</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Returns live/dead tuples, vacuum history, and scan metrics.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>table: str</code> &middot; <code>schema: str = "public"</code>
-                    </div>
-                    <div class="tool-example">&gt; "Check for dead tuples or vacuum needs on audit_logs."</div>
-                </div>
-
-                <!-- running_queries -->
-                <div class="tool-card" data-category="diagnostic">
-                    <div class="tool-card-header">
-                        <span class="tool-name">running_queries()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Shows active queries, elapsed runtimes, and wait events.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "Show currently executing queries and wait states."</div>
-                </div>
-
-                <!-- database_size -->
-                <div class="tool-card" data-category="diagnostic">
-                    <div class="tool-card-header">
-                        <span class="tool-name">database_size()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Returns database disk size and top relation sizes.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "What are the largest tables and indexes in this database?"</div>
-                </div>
-
-                <!-- get_active_profile -->
-                <div class="tool-card" data-category="profile">
-                    <div class="tool-card-header">
-                        <span class="tool-name">get_active_profile()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Returns active profile metadata with masked password.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "What database profile is currently loaded?"</div>
-                </div>
-
-                <!-- list_profiles -->
-                <div class="tool-card" data-category="profile">
-                    <div class="tool-card-header">
-                        <span class="tool-name">list_profiles()</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Lists configured profiles from SQLite.</p>
-                    <div class="tool-params"><strong>Args:</strong> None</div>
-                    <div class="tool-example">&gt; "List available database profiles."</div>
-                </div>
-
-                <!-- search_profiles -->
-                <div class="tool-card" data-category="profile">
-                    <div class="tool-card-header">
-                        <span class="tool-name">search_profiles(query)</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Searches stored profiles by partial match on name, host, or database.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>query: str</code>
-                    </div>
-                    <div class="tool-example">&gt; "Search for analytics or production profiles."</div>
-                </div>
-
-                <!-- switch_profile -->
-                <div class="tool-card" data-category="profile">
-                    <div class="tool-card-header">
-                        <span class="tool-name">switch_profile(profile_name)</span>
-                        <span class="tool-badge badge-ro">readOnly</span>
-                    </div>
-                    <p class="tool-desc">Switches active connection profile by name.</p>
-                    <div class="tool-params">
-                        <strong>Args:</strong> <code>profile_name: str</code>
-                    </div>
-                    <div class="tool-example">&gt; "Switch connection profile to staging."</div>
-                </div>
-            </div>
-
-            <!-- Resources and Prompts -->
-            <div class="reference-columns">
-                <!-- Resources -->
-                <div class="ref-col">
-                    <h3>MCP Resources</h3>
-                    <p class="guide-subtitle">URI templates for inspection without tool execution.</p>
-                    <div class="ref-item">
-                        <code>postgres://profiles</code>
-                        <div class="ref-desc">Stored connection profiles and active status.</div>
-                    </div>
-                    <div class="ref-item">
-                        <code>postgres://schemas</code>
-                        <div class="ref-desc">User schemas in the active database.</div>
-                    </div>
-                    <div class="ref-item">
-                        <code>postgres://schemas/{schema}/tables</code>
-                        <div class="ref-desc">Tables and views within the specified schema.</div>
-                    </div>
-                    <div class="ref-item">
-                        <code>postgres://schemas/{schema}/tables/{table}</code>
-                        <div class="ref-desc">Column types, nullability, and primary keys.</div>
-                    </div>
-                </div>
-
-                <!-- Prompts -->
-                <div class="ref-col">
-                    <h3>MCP Guided Prompts</h3>
-                    <p class="guide-subtitle">Multi-step diagnostic prompt workflows.</p>
-                    <div class="ref-item">
-                        <code>debug_slow_query(query)</code>
-                        <div class="ref-desc">Runs EXPLAIN ANALYZE, checks indexes, and suggests plan fixes.</div>
-                    </div>
-                    <div class="ref-item">
-                        <code>explore_table(table, schema)</code>
-                        <div class="ref-desc">Surfaces schema, constraints, statistics, and sample rows.</div>
-                    </div>
-                    <div class="ref-item">
-                        <code>find_data_issues(table, schema)</code>
-                        <div class="ref-desc">Checks for NULL spikes, duplicates, and broken foreign keys.</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        <div class="fc-toast-timer" id="alertTimer"></div>
     </div>
 </body>
 </html>
