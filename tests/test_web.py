@@ -23,6 +23,8 @@ def test_index_page_loads(test_client: TestClient):
     response = test_client.get("/")
     assert response.status_code == 200
     assert "PgPrism" in response.text
+    assert "/static/tokens.css" in response.text
+    assert "/static/components.css" in response.text
     assert "/static/style.css" in response.text
     assert "/static/app.js" in response.text
     assert "Connection Guide" in response.text
@@ -31,10 +33,19 @@ def test_index_page_loads(test_client: TestClient):
 
 
 def test_static_assets_serve(test_client: TestClient):
+    tokens_res = test_client.get("/static/tokens.css")
+    assert tokens_res.status_code == 200
+    assert "--fc-canvas:" in tokens_res.text
+    assert ":root[data-theme='light']" in tokens_res.text
+
+    components_res = test_client.get("/static/components.css")
+    assert components_res.status_code == 200
+    assert ".fc-panel" in components_res.text
+    assert ".fc-table" in components_res.text
+
     css_res = test_client.get("/static/style.css")
     assert css_res.status_code == 200
-    assert "--bg:" in css_res.text
-    assert ".nav-tabs" in css_res.text
+    assert "var(--fc-" in css_res.text
 
     js_res = test_client.get("/static/app.js")
     assert js_res.status_code == 200
