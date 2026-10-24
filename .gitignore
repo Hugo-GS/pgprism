@@ -41,3 +41,8 @@ Thumbs.db
 .agents/
 odd/
 atl/
+
+# MCP configuration & local client setups
+.mcp.json
+mcp_config.json
+.cursor/

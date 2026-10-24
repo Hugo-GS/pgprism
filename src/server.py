@@ -3,9 +3,10 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
+import os
 from mcp_types import ToolAnnotations
 from mcp.server.mcpserver import MCPServer
-from mcp.server.apps import Apps, APP_MIME_TYPE
+from mcp.server.apps import Apps
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -73,28 +74,15 @@ def _format_json_plan_to_text(plan_json: Any) -> str:
     return "\n".join(lines) if lines else json.dumps(plan_json, indent=2)
 
 
-def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
+def create_server(
+    storage: Optional[ProfileStorage] = None,
+    enable_ui: Optional[bool] = None,
+) -> MCPServer:
     """Creates and configures the MCP server instance."""
+    if enable_ui is None:
+        enable_ui = os.environ.get("PGPRISM_ENABLE_UI", "0").lower() in ("1", "true", "yes")
+
     store = storage if storage is not None else ProfileStorage()
-
-    apps = Apps()
-    explain_file = STATIC_DIR / "ui" / "explain_viewer.html"
-    explain_html = explain_file.read_text(encoding="utf-8") if explain_file.exists() else "<html><body>Explain viewer not found</body></html>"
-    data_grid_file = STATIC_DIR / "ui" / "data_grid.html"
-    data_grid_html = data_grid_file.read_text(encoding="utf-8") if data_grid_file.exists() else "<html><body>Data grid not found</body></html>"
-
-    apps.add_html_resource(
-        uri="ui://postgres/explain-viewer",
-        html=explain_html,
-        title="PostgreSQL Explain Plan Viewer",
-        description="Interactive execution plan tree viewer with bottleneck analysis and metrics.",
-    )
-    apps.add_html_resource(
-        uri="ui://postgres/data-grid",
-        html=data_grid_html,
-        title="PostgreSQL Data Grid",
-        description="Interactive data grid with sorting, search, pagination, and export.",
-    )
 
     active_state: Dict[str, Any] = {"current_db": None, "profile_id": None}
 
@@ -110,10 +98,6 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
 
         return DatabaseManager(profile, database=active_state["current_db"])
 
-    @apps.tool(
-        resource_uri="ui://postgres/data-grid",
-        annotations=READONLY_ANNOTATIONS,
-    )
     def read_query(query: str, max_rows: int = 100) -> Dict[str, Any]:
         """Executes a strictly read-only SQL query against the active PostgreSQL database.
         
@@ -127,10 +111,6 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
         except Exception as e:
             return {"status": "error", "message": f"Database execution error: {e}"}
 
-    @apps.tool(
-        resource_uri="ui://postgres/explain-viewer",
-        annotations=READONLY_ANNOTATIONS,
-    )
     def explain_query(query: str, analyze: bool = False) -> Dict[str, Any]:
         """Explains the execution plan for a read-only SQL query."""
         try:
@@ -150,12 +130,57 @@ def create_server(storage: Optional[ProfileStorage] = None) -> MCPServer:
         except Exception as e:
             return {"status": "error", "message": f"Explain execution error: {e}"}
 
+    if enable_ui:
+        apps = Apps()
+        explain_file = STATIC_DIR / "ui" / "explain_viewer.html"
+        explain_html = (
+            explain_file.read_text(encoding="utf-8")
+            if explain_file.exists()
+            else "<html><body>Explain viewer not found</body></html>"
+        )
+        data_grid_file = STATIC_DIR / "ui" / "data_grid.html"
+        data_grid_html = (
+            data_grid_file.read_text(encoding="utf-8")
+            if data_grid_file.exists()
+            else "<html><body>Data grid not found</body></html>"
+        )
+
+        apps.add_html_resource(
+            uri="ui://postgres/explain-viewer",
+            html=explain_html,
+            title="PostgreSQL Explain Plan Viewer",
+            description="Interactive execution plan tree viewer with bottleneck analysis and metrics.",
+        )
+        apps.add_html_resource(
+            uri="ui://postgres/data-grid",
+            html=data_grid_html,
+            title="PostgreSQL Data Grid",
+            description="Interactive data grid with sorting, search, pagination, and export.",
+        )
+
+        apps.tool(
+            resource_uri="ui://postgres/data-grid",
+            annotations=READONLY_ANNOTATIONS,
+        )(read_query)
+        apps.tool(
+            resource_uri="ui://postgres/explain-viewer",
+            annotations=READONLY_ANNOTATIONS,
+        )(explain_query)
+
+        extensions = [apps]
+    else:
+        extensions = None
+
     server = MCPServer(
         name="pgprism",
         version="0.1.0",
         description="PgPrism: Strictly read-only PostgreSQL MCP server with local SQLite profile configuration",
-        extensions=[apps],
+        extensions=extensions,
     )
+
+    if not enable_ui:
+        server.tool(annotations=READONLY_ANNOTATIONS)(read_query)
+        server.tool(annotations=READONLY_ANNOTATIONS)(explain_query)
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
     def get_active_profile() -> Dict[str, Any]:
