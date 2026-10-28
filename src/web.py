@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from src.database import DatabaseManager, close_all_pools
 from src.credentials import CredentialStoreError
-from src.storage import Profile, ProfileCreate, ProfileStorage, PublicProfile
+from src.storage import Profile, ProfileCreate, ProfileStorage, ProfileUpdate, PublicProfile
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_FILE = STATIC_DIR / "index.html"
@@ -116,6 +116,34 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
                 detail=f"Profile with name '{payload.name}' already exists.",
             )
         return store.save_profile(payload)
+
+    @app.get("/api/profiles/{profile_id}", response_model=PublicProfile)
+    def get_profile(profile_id: int):
+        profile = get_storage().get_profile(profile_id)
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Profile with id {profile_id} not found.",
+            )
+        return profile
+
+    @app.patch("/api/profiles/{profile_id}", response_model=PublicProfile)
+    def update_profile(profile_id: int, payload: ProfileUpdate):
+        store = get_storage()
+        if payload.name is not None:
+            existing = store.get_profile_by_name(payload.name)
+            if existing and existing.id != profile_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Profile with name '{payload.name}' already exists.",
+                )
+        updated = store.partial_update_profile(profile_id, payload)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Profile with id {profile_id} not found.",
+            )
+        return updated
 
     @app.post("/api/profiles/{profile_id}/activate", response_model=PublicProfile)
     def activate_profile(profile_id: int):

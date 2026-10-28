@@ -138,7 +138,9 @@ async function loadProfiles(query = '') {
                 <td>
                     <div class="row-actions">
                         ${p.is_active ? '' : `<button type="button" onclick="activateProfile(${p.id})" class="fc-btn">Select</button>`}
-                        <button type="button" onclick="deleteProfile(${p.id})" class="fc-btn fc-btn-ghost fc-btn-danger">Delete</button>
+                        <button type="button" onclick="openSettingsModal(${p.id})" class="fc-btn fc-btn-ghost fc-btn-icon" title="Settings" aria-label="Settings for ${escapeHtml(p.name)}">
+                            <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                        </button>
                     </div>
                 </td>
             </tr>
@@ -147,6 +149,65 @@ async function loadProfiles(query = '') {
         console.error("Error loading profiles:", err);
     }
 }
+
+async function openSettingsModal(profileId) {
+    try {
+        const res = await fetch(`/api/profiles/${profileId}`);
+        if (!res.ok) {
+            showAlert('Failed to load profile details.', true);
+            return;
+        }
+        const profile = await res.json();
+
+        document.getElementById('edit-id').value = profile.id;
+        document.getElementById('edit-name').value = profile.name || '';
+        document.getElementById('edit-host').value = profile.host || 'localhost';
+        document.getElementById('edit-port').value = profile.port || 5432;
+        document.getElementById('edit-database').value = profile.database || 'postgres';
+        document.getElementById('edit-username').value = profile.username || '';
+        document.getElementById('edit-password').value = '';
+        document.getElementById('edit-sslmode').value = profile.sslmode || 'prefer';
+        document.getElementById('edit-statement-timeout').value = profile.statement_timeout_ms || 30000;
+
+        const subtitle = document.getElementById('settingsModalSubtitle');
+        if (subtitle) {
+            subtitle.textContent = `${profile.name} — ${profile.username}@${profile.host}:${profile.port}/${profile.database}`;
+        }
+
+        const modal = document.getElementById('settingsModal');
+        if (modal) {
+            modal.hidden = false;
+        }
+    } catch (err) {
+        console.error('Error opening settings modal:', err);
+        showAlert('Error opening settings modal: ' + err.message, true);
+    }
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    if (modal) {
+        modal.hidden = true;
+    }
+}
+
+async function deleteCurrentSettingsProfile() {
+    const id = document.getElementById('edit-id').value;
+    if (!id) return;
+    if (!confirm('Permanently delete this connection profile? This action cannot be undone.')) return;
+    const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+        showAlert('Profile deleted.');
+        closeSettingsModal();
+        await loadProfiles();
+        await loadEnvInfo();
+    } else {
+        showAlert('Deletion failed.', true);
+    }
+}
+
+const openEditModal = openSettingsModal;
+const closeEditModal = closeSettingsModal;
 
 async function activateProfile(id) {
     const res = await fetch(`/api/profiles/${id}/activate`, { method: 'POST' });
@@ -401,6 +462,67 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
         }
     } catch (err) {
         showAlert('Connection error: ' + err.message, true);
+    }
+});
+
+const settingsForm = document.getElementById('settingsProfileForm') || document.getElementById('editProfileForm');
+if (settingsForm) {
+    settingsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('edit-id').value;
+        const passwordVal = document.getElementById('edit-password').value;
+
+        const payload = {
+            name: document.getElementById('edit-name').value.trim(),
+            host: document.getElementById('edit-host').value.trim(),
+            port: parseInt(document.getElementById('edit-port').value, 10),
+            database: document.getElementById('edit-database').value.trim() || 'postgres',
+            username: document.getElementById('edit-username').value.trim(),
+            sslmode: document.getElementById('edit-sslmode').value,
+            statement_timeout_ms: parseInt(document.getElementById('edit-statement-timeout').value, 10) || 30000,
+        };
+
+        if (passwordVal) {
+            payload.password = passwordVal;
+        }
+
+        try {
+            const res = await fetch(`/api/profiles/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (res.ok) {
+                showAlert('Profile updated successfully.');
+                closeSettingsModal();
+                await loadProfiles();
+                await loadEnvInfo();
+            } else {
+                const err = await res.json();
+                showAlert(err.detail || 'Update failed', true);
+            }
+        } catch (err) {
+            showAlert('Connection error: ' + err.message, true);
+        }
+    });
+}
+
+const settingsModalEl = document.getElementById('settingsModal') || document.getElementById('editModal');
+if (settingsModalEl) {
+    settingsModalEl.addEventListener('click', (e) => {
+        if (e.target === settingsModalEl) {
+            closeSettingsModal();
+        }
+    });
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('settingsModal') || document.getElementById('editModal');
+        if (modal && !modal.hidden) {
+            closeSettingsModal();
+        }
     }
 });
 

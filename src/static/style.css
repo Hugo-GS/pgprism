@@ -17,7 +17,7 @@
 .fc-table tbody tr[data-active='true'] { background: var(--fc-accent-soft); }
 .profile-name { color: var(--fc-text); font-weight: 550; }
 .profile-uri { color: var(--fc-text-secondary); font-family: var(--fc-font-mono); font-size: var(--fc-font-xs); white-space: nowrap; }
-.row-actions { display: flex; justify-content: flex-end; gap: var(--fc-space-2); }
+.row-actions { display: flex; justify-content: flex-end; align-items: center; gap: var(--fc-space-2); }
 .fc-table td.fc-empty { height: auto; }
 
 /* Feedback toast */

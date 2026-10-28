@@ -68,7 +68,7 @@
                     <section aria-labelledby="profilesTitle">
                         <div class="fc-panel">
                             <div class="fc-panel-header">
-                                <h2 class="fc-section-title" id="profilesTitle">Configured Profiles (SQLite)</h2>
+                                <h2 class="fc-section-title" id="profilesTitle">Configured Profiles</h2>
                                 <span class="fc-faint fc-text-xs" id="profilesCount" aria-live="polite"></span>
                             </div>
                             <div class="fc-table-tools">
@@ -490,6 +490,84 @@
                     </div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <div class="fc-dialog-backdrop" id="settingsModal" hidden>
+        <div class="fc-dialog fc-panel" style="width: min(500px, 100%);" role="dialog" aria-labelledby="settingsModalTitle" aria-modal="true">
+            <div class="fc-panel-header">
+                <div>
+                    <h3 class="fc-section-title" id="settingsModalTitle">Connection Settings</h3>
+                    <div class="section-caption" id="settingsModalSubtitle">Manage profile configuration and credentials</div>
+                </div>
+                <button type="button" class="fc-btn fc-btn-ghost fc-btn-icon" onclick="closeSettingsModal()" aria-label="Close dialog">✕</button>
+            </div>
+            <form id="settingsProfileForm">
+                <input type="hidden" id="edit-id">
+                <div class="fc-panel-body">
+                    <div class="fc-stack" style="gap: 16px;">
+                        <div>
+                            <label class="fc-field-label" for="edit-name">Profile Name</label>
+                            <input class="fc-input" id="edit-name" required placeholder="local-dev" autocomplete="off">
+                        </div>
+                        <div class="field-row">
+                            <div>
+                                <label class="fc-field-label" for="edit-host">Host</label>
+                                <input class="fc-input" id="edit-host" required autocomplete="off">
+                            </div>
+                            <div>
+                                <label class="fc-field-label" for="edit-port">Port</label>
+                                <input class="fc-input fc-mono" id="edit-port" type="number" min="1" max="65535" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="fc-field-label" for="edit-database">Database</label>
+                            <input class="fc-input" id="edit-database" placeholder="postgres (default)" autocomplete="off">
+                        </div>
+                        <div>
+                            <label class="fc-field-label" for="edit-username">Username</label>
+                            <input class="fc-input" id="edit-username" required autocomplete="off">
+                        </div>
+                        <div>
+                            <label class="fc-field-label" for="edit-password">New Password</label>
+                            <input class="fc-input" id="edit-password" type="password" placeholder="Leave blank to keep existing password" autocomplete="new-password">
+                        </div>
+                        <div class="field-row" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);">
+                            <div>
+                                <label class="fc-field-label" for="edit-sslmode">SSL Mode</label>
+                                <select class="fc-select" id="edit-sslmode">
+                                    <option value="prefer">prefer</option>
+                                    <option value="require">require</option>
+                                    <option value="disable">disable</option>
+                                    <option value="allow">allow</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="fc-field-label" for="edit-statement-timeout">Timeout (ms)</label>
+                                <input class="fc-input fc-mono" type="number" id="edit-statement-timeout" min="1000" max="300000" step="1000">
+                            </div>
+                        </div>
+
+                        <!-- Danger Zone: Delete Profile -->
+                        <div style="margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--fc-separator);">
+                            <div class="fc-eyebrow" style="color: var(--fc-danger); margin-bottom: 6px;">Danger Zone</div>
+                            <div class="fc-flex fc-between fc-gap-3" style="align-items: center; flex-wrap: wrap;">
+                                <div>
+                                    <div style="font-weight: 550; font-size: 12px; color: var(--fc-text);">Delete Profile</div>
+                                    <div class="fc-faint fc-text-xs">Permanently remove this connection and its stored secret.</div>
+                                </div>
+                                <button type="button" class="fc-btn fc-btn-ghost fc-btn-danger" onclick="deleteCurrentSettingsProfile()">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="fc-panel-footer" style="justify-content: flex-end;">
+                    <div class="button-row">
+                        <button type="button" onclick="closeSettingsModal()" class="fc-btn">Cancel</button>
+                        <button type="submit" class="fc-btn fc-btn-primary">Save Changes</button>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 
