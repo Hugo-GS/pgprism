@@ -1,12 +1,13 @@
 import logging
 import os
+import sqlite3
+from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
-from typing import Any, Iterator, List, Optional
+from typing import Any
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -90,14 +91,14 @@ class ProfileCreate(BaseModel):
 class ProfileUpdate(BaseModel):
     """Partial update payload — only provided fields are changed."""
 
-    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    host: Optional[str] = None
-    port: Optional[int] = Field(default=None, ge=1, le=65535)
-    database: Optional[str] = None
-    username: Optional[str] = Field(default=None, min_length=1)
-    password: Optional[str] = Field(default=None, repr=False)
-    sslmode: Optional[str] = None
-    statement_timeout_ms: Optional[int] = Field(default=None, ge=1000, le=300000)
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    host: str | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+    database: str | None = None
+    username: str | None = Field(default=None, min_length=1)
+    password: str | None = Field(default=None, repr=False)
+    sslmode: str | None = None
+    statement_timeout_ms: int | None = Field(default=None, ge=1000, le=300000)
 
     @field_validator("database", mode="before")
     @classmethod
@@ -105,7 +106,7 @@ class ProfileUpdate(BaseModel):
         if v is None:
             return None
         stripped = str(v).strip()
-        return "postgres" if not stripped else stripped
+        return stripped or "postgres"
 
 
 class Profile(ProfileCreate):
@@ -126,11 +127,13 @@ class ProfileStorage:
 
     def __init__(
         self,
-        db_path: Optional[Path | str] = None,
+        db_path: Path | str | None = None,
         *,
         credential_store: CredentialStore | None = None,
     ) -> None:
-        self.credential_store = credential_store if credential_store is not None else OSCredentialStore()
+        self.credential_store = (
+            credential_store if credential_store is not None else OSCredentialStore()
+        )
         if db_path is None:
             self.db_path = get_default_db_path()
         else:
@@ -186,10 +189,15 @@ class ProfileStorage:
             )
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(profiles)")}
             if "statement_timeout_ms" not in columns:
-                conn.execute("ALTER TABLE profiles ADD COLUMN statement_timeout_ms INTEGER NOT NULL DEFAULT 30000")
+                conn.execute(
+                    "ALTER TABLE profiles "
+                    "ADD COLUMN statement_timeout_ms INTEGER NOT NULL DEFAULT 30000"
+                )
             if "credential_id" not in columns:
                 conn.execute("ALTER TABLE profiles ADD COLUMN credential_id TEXT")
-            for row in conn.execute("SELECT id, password FROM profiles WHERE password != ''").fetchall():
+            for row in conn.execute(
+                "SELECT id, password FROM profiles WHERE password != ''"
+            ).fetchall():
                 reference = uuid4().hex
                 created_references.append(reference)
                 self.credential_store.set(reference, row["password"])
@@ -207,7 +215,10 @@ class ProfileStorage:
                 conn.execute("VACUUM")
                 checkpoint = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
                 if checkpoint[0]:
-                    logger.warning("Legacy credential cleanup needs a WAL checkpoint after other readers close.")
+                    logger.warning(
+                        "Legacy credential cleanup needs a WAL checkpoint "
+                        "after other readers close."
+                    )
 
     def _row_to_profile(self, row: sqlite3.Row) -> Profile:
         keys = row.keys()
@@ -235,28 +246,24 @@ class ProfileStorage:
             updated_at=row["updated_at"],
         )
 
-    def list_profiles(self) -> List[Profile]:
+    def list_profiles(self) -> list[Profile]:
         with self._get_connection() as conn:
             rows = conn.execute(
                 "SELECT * FROM profiles ORDER BY is_active DESC, name ASC"
             ).fetchall()
             return [self._row_to_profile(r) for r in rows]
 
-    def get_profile(self, profile_id: int) -> Optional[Profile]:
+    def get_profile(self, profile_id: int) -> Profile | None:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM profiles WHERE id = ?", (profile_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
             return self._row_to_profile(row) if row else None
 
-    def get_profile_by_name(self, name: str) -> Optional[Profile]:
+    def get_profile_by_name(self, name: str) -> Profile | None:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM profiles WHERE name = ?", (name,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM profiles WHERE name = ?", (name,)).fetchone()
             return self._row_to_profile(row) if row else None
 
-    def search_profiles(self, query: str) -> List[Profile]:
+    def search_profiles(self, query: str) -> list[Profile]:
         """Search profiles by partial match on name, host, or database."""
         cleaned = query.strip()
         if not cleaned:
@@ -273,7 +280,7 @@ class ProfileStorage:
             ).fetchall()
             return [self._row_to_profile(r) for r in rows]
 
-    def _profile_from_env(self) -> Optional[Profile]:
+    def _profile_from_env(self) -> Profile | None:
         """Build a profile from DATABASE_URL or PG* environment variables."""
         database_url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
         now = datetime.now(timezone.utc).isoformat()
@@ -319,17 +326,13 @@ class ProfileStorage:
             )
         return None
 
-    def get_active_profile(self) -> Optional[Profile]:
+    def get_active_profile(self) -> Profile | None:
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM profiles WHERE is_active = 1 LIMIT 1"
-            ).fetchone()
+            row = conn.execute("SELECT * FROM profiles WHERE is_active = 1 LIMIT 1").fetchone()
             if row:
                 return self._row_to_profile(row)
 
-            fallback_row = conn.execute(
-                "SELECT * FROM profiles ORDER BY id ASC LIMIT 1"
-            ).fetchone()
+            fallback_row = conn.execute("SELECT * FROM profiles ORDER BY id ASC LIMIT 1").fetchone()
             if fallback_row:
                 return self._row_to_profile(fallback_row)
 
@@ -357,55 +360,96 @@ class ProfileStorage:
                 reference = self._store_password(profile.password)
                 cursor = conn.execute(
                     """
-                    INSERT INTO profiles (name, host, port, database, username, credential_id, sslmode, statement_timeout_ms, is_active, created_at, updated_at)
+                    INSERT INTO profiles (
+                        name, host, port, database, username, credential_id, sslmode,
+                        statement_timeout_ms, is_active, created_at, updated_at
+                    )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (profile.name, profile.host, profile.port, profile.database,
-                     profile.username, reference, profile.sslmode,
-                     profile.statement_timeout_ms, is_active, now, now),
+                    (
+                        profile.name,
+                        profile.host,
+                        profile.port,
+                        profile.database,
+                        profile.username,
+                        reference,
+                        profile.sslmode,
+                        profile.statement_timeout_ms,
+                        is_active,
+                        now,
+                        now,
+                    ),
                 )
                 profile_id = cursor.lastrowid
+                if profile_id is None:
+                    raise RuntimeError("SQLite did not return an id for the new profile.")
                 conn.commit()
         except Exception:
             self._discard_secret(reference)
             raise
-        return Profile(**profile.model_dump(), id=profile_id, is_active=is_active, created_at=now, updated_at=now)
+        return Profile(
+            **profile.model_dump(),
+            id=profile_id,
+            is_active=is_active,
+            created_at=now,
+            updated_at=now,
+        )
 
-    def update_profile(self, profile_id: int, profile: ProfileCreate) -> Optional[Profile]:
+    def update_profile(self, profile_id: int, profile: ProfileCreate) -> Profile | None:
         now = datetime.now(timezone.utc).isoformat()
         reference = None
         try:
             with self._get_connection() as conn:
                 conn.execute("BEGIN IMMEDIATE")
-                existing = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+                existing = conn.execute(
+                    "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+                ).fetchone()
                 if existing is None:
                     return None
                 reference = self._store_password(profile.password)
                 conn.execute(
                     """
                     UPDATE profiles
-                    SET name = ?, host = ?, port = ?, database = ?, username = ?, credential_id = ?, sslmode = ?, statement_timeout_ms = ?, updated_at = ?
+                    SET name = ?, host = ?, port = ?, database = ?, username = ?,
+                        credential_id = ?, sslmode = ?, statement_timeout_ms = ?, updated_at = ?
                     WHERE id = ?
                     """,
-                    (profile.name, profile.host, profile.port, profile.database,
-                     profile.username, reference, profile.sslmode,
-                     profile.statement_timeout_ms, now, profile_id),
+                    (
+                        profile.name,
+                        profile.host,
+                        profile.port,
+                        profile.database,
+                        profile.username,
+                        reference,
+                        profile.sslmode,
+                        profile.statement_timeout_ms,
+                        now,
+                        profile_id,
+                    ),
                 )
                 conn.commit()
         except Exception:
             self._discard_secret(reference)
             raise
         self._discard_secret(existing["credential_id"])
-        return Profile(**profile.model_dump(), id=profile_id, is_active=bool(existing["is_active"]), created_at=existing["created_at"], updated_at=now)
+        return Profile(
+            **profile.model_dump(),
+            id=profile_id,
+            is_active=bool(existing["is_active"]),
+            created_at=existing["created_at"],
+            updated_at=now,
+        )
 
-    def partial_update_profile(self, profile_id: int, patch: "ProfileUpdate") -> Optional[Profile]:
+    def partial_update_profile(self, profile_id: int, patch: "ProfileUpdate") -> Profile | None:
         """Apply only the fields present in *patch*, leaving the rest untouched."""
         now = datetime.now(timezone.utc).isoformat()
         new_reference = None
         try:
             with self._get_connection() as conn:
                 conn.execute("BEGIN IMMEDIATE")
-                existing = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+                existing = conn.execute(
+                    "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+                ).fetchone()
                 if existing is None:
                     return None
 
@@ -421,10 +465,12 @@ class ProfileStorage:
                     credential_id = old_reference
 
                 if changes:
+                    # Column names come from ProfileUpdate fields, never from user input.
                     set_clause = ", ".join(f"{col} = ?" for col in changes)
                     values = list(changes.values())
                     conn.execute(
-                        f"UPDATE profiles SET {set_clause}, credential_id = ?, updated_at = ? WHERE id = ?",
+                        f"UPDATE profiles SET {set_clause}, credential_id = ?, "  # noqa: S608
+                        "updated_at = ? WHERE id = ?",
                         (*values, credential_id, now, profile_id),
                     )
                 elif credential_id != old_reference:
@@ -445,7 +491,7 @@ class ProfileStorage:
 
         return self.get_profile(profile_id)
 
-    def set_active_profile(self, profile_id: int) -> Optional[Profile]:
+    def set_active_profile(self, profile_id: int) -> Profile | None:
         with self._get_connection() as conn:
             row = conn.execute("SELECT id FROM profiles WHERE id = ?", (profile_id,)).fetchone()
             if not row:
@@ -473,9 +519,13 @@ class ProfileStorage:
                     self.credential_store.delete(reference)
                 conn.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
                 if row["is_active"]:
-                    remaining = conn.execute("SELECT id FROM profiles ORDER BY id LIMIT 1").fetchone()
+                    remaining = conn.execute(
+                        "SELECT id FROM profiles ORDER BY id LIMIT 1"
+                    ).fetchone()
                     if remaining:
-                        conn.execute("UPDATE profiles SET is_active = 1 WHERE id = ?", (remaining["id"],))
+                        conn.execute(
+                            "UPDATE profiles SET is_active = 1 WHERE id = ?", (remaining["id"],)
+                        )
                 conn.commit()
         except Exception:
             if removed_reference and removed_password is not None:

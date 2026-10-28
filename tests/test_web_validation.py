@@ -9,7 +9,6 @@ from starlette.testclient import TestClient
 from src.storage import ProfileStorage
 from src.web import create_app
 
-
 SECRET = "validation-secret-marker"
 
 
@@ -21,9 +20,14 @@ def client(tmp_path: Path):
 
 @pytest.fixture
 def unchanged_profiles(client, memory_keyring):
-    saved = client.post("/api/profiles", json={
-        "name": "existing", "username": "reader", "password": "stored-secret",
-    })
+    saved = client.post(
+        "/api/profiles",
+        json={
+            "name": "existing",
+            "username": "reader",
+            "password": "stored-secret",
+        },
+    )
     assert saved.status_code == 201
     before = client.get("/api/profiles").json()
     assert before == [saved.json()]
@@ -51,7 +55,7 @@ def assert_validation_metadata(response, error_type, location):
     assert error["type"] == error_type
     assert isinstance(error["msg"], str) and error["msg"].strip()
     assert len(error["loc"]) == 2
-    assert error["loc"][:len(location)] == location
+    assert error["loc"][: len(location)] == location
     return error
 
 
@@ -61,18 +65,27 @@ def test_missing_field_does_not_reflect_password(client, unchanged_profiles, end
     assert_validation_metadata(response, "missing", ["body", "username"])
 
 
-@pytest.mark.parametrize("fields, error_type, location", [
-    ({"password": {"nested": SECRET}}, "string_type", ["body", "password"]),
-    ({"password": SECRET, "port": 0}, "greater_than_equal", ["body", "port"]),
-])
-def test_invalid_profile_returns_only_validation_metadata(client, unchanged_profiles, fields, error_type, location):
-    response = client.post("/api/profiles", json={"name": "invalid", "username": "reader", **fields})
+@pytest.mark.parametrize(
+    "fields, error_type, location",
+    [
+        ({"password": {"nested": SECRET}}, "string_type", ["body", "password"]),
+        ({"password": SECRET, "port": 0}, "greater_than_equal", ["body", "port"]),
+    ],
+)
+def test_invalid_profile_returns_only_validation_metadata(
+    client, unchanged_profiles, fields, error_type, location
+):
+    response = client.post(
+        "/api/profiles", json={"name": "invalid", "username": "reader", **fields}
+    )
     assert_validation_metadata(response, error_type, location)
 
 
 def test_malformed_json_does_not_reflect_body(client, unchanged_profiles):
     body = '{"name":"invalid","password":"' + SECRET + '",'
-    response = client.post("/api/profiles/test", content=body, headers={"Content-Type": "application/json"})
+    response = client.post(
+        "/api/profiles/test", content=body, headers={"Content-Type": "application/json"}
+    )
     error = assert_validation_metadata(response, "json_invalid", ["body"])
     assert isinstance(error["loc"][1], int)
 
@@ -85,9 +98,14 @@ def test_invalid_profile_id_keeps_422_without_reflecting_input(client, unchanged
 def test_valid_connection_test_still_receives_password(client, memory_keyring):
     with patch("src.web.DatabaseManager") as manager:
         manager.return_value.test_connection.return_value = (True, "PostgreSQL test version")
-        response = client.post("/api/profiles/test", json={
-            "name": "valid", "username": "reader", "password": SECRET,
-        })
+        response = client.post(
+            "/api/profiles/test",
+            json={
+                "name": "valid",
+                "username": "reader",
+                "password": SECRET,
+            },
+        )
         assert manager.call_args.args[0].password == SECRET
         manager.return_value.test_connection.assert_called_once_with()
     assert response.status_code == 200

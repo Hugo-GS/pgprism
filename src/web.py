@@ -1,16 +1,18 @@
 """Local Web Configuration UI for PostgreSQL MCP Server."""
 
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional
+
+import uvicorn
 from fastapi import FastAPI, HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-import uvicorn
-from src.database import DatabaseManager, close_all_pools
+
 from src.credentials import CredentialStoreError
+from src.database import DatabaseManager, close_all_pools
 from src.storage import Profile, ProfileCreate, ProfileStorage, ProfileUpdate, PublicProfile
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -28,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         close_all_pools()
 
 
-def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
+def create_app(storage: ProfileStorage | None = None) -> FastAPI:
     """Creates the FastAPI configuration app."""
     app = FastAPI(title="PgPrism Configuration", lifespan=lifespan)
     app.state.storage = storage
@@ -38,16 +40,15 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
 
     @app.exception_handler(CredentialStoreError)
     async def credential_store_error(_request, error: CredentialStoreError):
-        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(error)})
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(error)}
+        )
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(_request, error: RequestValidationError):
         # Even a missing unrelated field can include the entire body in "input".
         # Return only validation metadata, never raw inputs or exception context.
-        details = [
-            {key: item[key] for key in ("type", "loc", "msg")}
-            for item in error.errors()
-        ]
+        details = [{key: item[key] for key in ("type", "loc", "msg")} for item in error.errors()]
         return JSONResponse(status_code=422, content={"detail": details})
 
     if STATIC_DIR.exists():
@@ -100,8 +101,8 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
             "active_database": active.database if active else None,
         }
 
-    @app.get("/api/profiles", response_model=List[PublicProfile])
-    def list_profiles(q: Optional[str] = None):
+    @app.get("/api/profiles", response_model=list[PublicProfile])
+    def list_profiles(q: str | None = None):
         if q and q.strip():
             return get_storage().search_profiles(q.strip())
         return get_storage().list_profiles()
@@ -165,7 +166,7 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
             )
         return {"success": True}
 
-    @app.get("/api/profiles/{profile_id}/databases", response_model=List[str])
+    @app.get("/api/profiles/{profile_id}/databases", response_model=list[str])
     def list_profile_databases(profile_id: int):
         profile = get_storage().get_profile(profile_id)
         if not profile:
@@ -180,7 +181,7 @@ def create_app(storage: Optional[ProfileStorage] = None) -> FastAPI:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to query server databases: {e}",
-            )
+            ) from e
 
     @app.post("/api/profiles/test")
     def test_profile_connection(payload: ProfileCreate):

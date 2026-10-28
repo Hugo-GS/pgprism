@@ -21,6 +21,7 @@ dev = [
     "pytest>=8.0.0",
     "httpx>=0.27.0",
     "ruff>=0.17.2",
+    "basedpyright>=1.31.0",
 ]
 
 [project.scripts]
@@ -44,6 +45,10 @@ disable-search-path-heuristics = true
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[tool.basedpyright]
+typeCheckingMode = "standard"
+pythonVersion = "3.10"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
@@ -63,4 +68,5 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106"]  # asserts and fake credentials are expected in tests
+# asserts, fake credentials, and subprocess calls with sys.executable are expected in tests
+"tests/**" = ["S101", "S105", "S106", "S603"]

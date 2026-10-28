@@ -4,16 +4,15 @@ import math
 import uuid
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
-from typing import Dict, List, Optional, TypeAlias, TypedDict, Union
+from typing import TypeAlias, TypedDict
 
-
-JsonPrimitive: TypeAlias = Union[str, int, float, bool, None]
-JsonValue: TypeAlias = Union[JsonPrimitive, List["JsonValue"], Dict[str, "JsonValue"]]
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 
 
 class QueryResult(TypedDict):
-    columns: List[str]
-    rows: List[Dict[str, JsonValue]]
+    columns: list[str]
+    rows: list[dict[str, JsonValue]]
     row_count: int
     truncated: bool
 
@@ -27,14 +26,14 @@ class ColumnInfo(TypedDict):
     name: str
     type: str
     nullable: bool
-    default: Optional[str]
+    default: str | None
     is_primary_key: bool
 
 
 class TableDescription(TypedDict):
     table: str
     schema: str
-    columns: List[ColumnInfo]
+    columns: list[ColumnInfo]
 
 
 def serialize_value(val: object) -> JsonValue:

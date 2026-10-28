@@ -1,5 +1,6 @@
 """Tests for partial profile update (GET + PATCH endpoints and storage layer)."""
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,6 @@ from starlette.testclient import TestClient
 
 from src.storage import ProfileCreate, ProfileStorage, ProfileUpdate
 from src.web import create_app
-
 
 # ---------------------------------------------------------------------------
 # Storage-layer tests
@@ -41,6 +41,7 @@ def storage(tmp_path: Path, secrets):
 def test_partial_update_name_only(storage: ProfileStorage):
     saved = storage.save_profile(ProfileCreate(name="old", username="reader", password="secret"))
     updated = storage.partial_update_profile(saved.id, ProfileUpdate(name="new"))
+    assert updated is not None
     assert updated.name == "new"
     assert updated.host == saved.host
     assert updated.port == saved.port
@@ -52,6 +53,7 @@ def test_partial_update_name_only(storage: ProfileStorage):
 def test_partial_update_host_and_port(storage: ProfileStorage):
     saved = storage.save_profile(ProfileCreate(name="dev", username="reader"))
     updated = storage.partial_update_profile(saved.id, ProfileUpdate(host="db.internal", port=5433))
+    assert updated is not None
     assert updated.host == "db.internal"
     assert updated.port == 5433
     assert updated.name == "dev"
@@ -61,6 +63,7 @@ def test_partial_update_password_replaces_old(storage: ProfileStorage, secrets: 
     saved = storage.save_profile(ProfileCreate(name="dev", username="reader", password="old-pass"))
     assert len(secrets.passwords) == 1
     updated = storage.partial_update_profile(saved.id, ProfileUpdate(password="new-pass"))
+    assert updated is not None
     assert updated.password == "new-pass"
     assert len(secrets.passwords) == 1
     assert "old-pass" not in secrets.passwords.values()
@@ -69,14 +72,18 @@ def test_partial_update_password_replaces_old(storage: ProfileStorage, secrets: 
 def test_partial_update_password_to_empty_clears(storage: ProfileStorage, secrets: MemorySecrets):
     saved = storage.save_profile(ProfileCreate(name="dev", username="reader", password="secret"))
     updated = storage.partial_update_profile(saved.id, ProfileUpdate(password=""))
+    assert updated is not None
     assert updated.password == ""
     assert secrets.passwords == {}
 
 
-def test_partial_update_without_password_keeps_existing(storage: ProfileStorage, secrets: MemorySecrets):
+def test_partial_update_without_password_keeps_existing(
+    storage: ProfileStorage, secrets: MemorySecrets
+):
     saved = storage.save_profile(ProfileCreate(name="dev", username="reader", password="keep-me"))
     snapshot = dict(secrets.passwords)
     updated = storage.partial_update_profile(saved.id, ProfileUpdate(name="renamed"))
+    assert updated is not None
     assert updated.password == "keep-me"
     assert secrets.passwords == snapshot
 
@@ -92,12 +99,14 @@ def test_partial_update_preserves_is_active(storage: ProfileStorage):
     assert p1.is_active is True
     assert p2.is_active is False
     updated = storage.partial_update_profile(p1.id, ProfileUpdate(host="new-host"))
+    assert updated is not None
     assert updated.is_active is True
 
 
 def test_partial_update_empty_patch_is_noop(storage: ProfileStorage):
     saved = storage.save_profile(ProfileCreate(name="stable", username="reader"))
     updated = storage.partial_update_profile(saved.id, ProfileUpdate())
+    assert updated is not None
     assert updated == saved
 
 
@@ -107,7 +116,7 @@ def test_partial_update_empty_patch_is_noop(storage: ProfileStorage):
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path) -> Iterator[TestClient]:
     storage = ProfileStorage(db_path=tmp_path / "web.db")
     app = create_app(storage=storage)
     with TestClient(app) as c:
@@ -115,8 +124,15 @@ def client(tmp_path: Path) -> TestClient:
 
 
 def _create(client: TestClient, **overrides) -> dict:
-    payload = {"name": "test-profile", "host": "localhost", "port": 5432,
-               "database": "testdb", "username": "reader", "password": "original", **overrides}
+    payload = {
+        "name": "test-profile",
+        "host": "localhost",
+        "port": 5432,
+        "database": "testdb",
+        "username": "reader",
+        "password": "original",
+        **overrides,
+    }
     res = client.post("/api/profiles", json=payload)
     assert res.status_code == 201
     return res.json()

@@ -114,15 +114,13 @@ def test_create_and_get_profile(temp_storage: ProfileStorage):
 
 
 def test_set_active_profile(temp_storage: ProfileStorage):
-    p1 = temp_storage.save_profile(
-        ProfileCreate(name="db-one", database="db1", username="user1")
-    )
-    p2 = temp_storage.save_profile(
-        ProfileCreate(name="db-two", database="db2", username="user2")
-    )
+    p1 = temp_storage.save_profile(ProfileCreate(name="db-one", database="db1", username="user1"))
+    p2 = temp_storage.save_profile(ProfileCreate(name="db-two", database="db2", username="user2"))
 
     # p1 was initially active
-    assert temp_storage.get_active_profile().id == p1.id
+    initial = temp_storage.get_active_profile()
+    assert initial is not None
+    assert initial.id == p1.id
 
     # Switch active to p2
     temp_storage.set_active_profile(p2.id)
@@ -133,13 +131,12 @@ def test_set_active_profile(temp_storage: ProfileStorage):
 
     # Verify p1 is no longer active
     p1_refreshed = temp_storage.get_profile(p1.id)
+    assert p1_refreshed is not None
     assert p1_refreshed.is_active is False
 
 
 def test_delete_profile(temp_storage: ProfileStorage):
-    p1 = temp_storage.save_profile(
-        ProfileCreate(name="to-delete", database="db", username="u")
-    )
+    p1 = temp_storage.save_profile(ProfileCreate(name="to-delete", database="db", username="u"))
     assert temp_storage.delete_profile(p1.id) is True
     assert temp_storage.get_profile(p1.id) is None
     assert temp_storage.delete_profile(9999) is False
@@ -167,23 +164,18 @@ def test_update_existing_profile(temp_storage: ProfileStorage):
 
 def test_database_field_optional_defaults_to_postgres(temp_storage: ProfileStorage):
     # Omitted database
-    p1 = temp_storage.save_profile(
-        ProfileCreate(name="no-db", username="postgres")
-    )
+    p1 = temp_storage.save_profile(ProfileCreate(name="no-db", username="postgres"))
     assert p1.database == "postgres"
 
     # Empty string database
-    p2 = temp_storage.save_profile(
-        ProfileCreate(name="empty-db", database="", username="postgres")
-    )
+    p2 = temp_storage.save_profile(ProfileCreate(name="empty-db", database="", username="postgres"))
     assert p2.database == "postgres"
 
 
 def test_statement_timeout_ms_default(temp_storage: ProfileStorage):
-    p1 = temp_storage.save_profile(
-        ProfileCreate(name="timeout-default", username="postgres")
-    )
+    p1 = temp_storage.save_profile(ProfileCreate(name="timeout-default", username="postgres"))
     assert p1.statement_timeout_ms == 30000
+
 
 def test_statement_timeout_ms_persistence(temp_storage: ProfileStorage):
     p2 = temp_storage.save_profile(
@@ -197,12 +189,13 @@ def test_statement_timeout_ms_persistence(temp_storage: ProfileStorage):
     updated = temp_storage.update_profile(
         p2.id, ProfileCreate(name="timeout-custom", username="postgres", statement_timeout_ms=60000)
     )
+    assert updated is not None
     assert updated.statement_timeout_ms == 60000
 
 
 def test_get_active_profile_fallback_to_first_when_none_active(temp_storage: ProfileStorage):
     p1 = temp_storage.save_profile(ProfileCreate(name="first-db", username="postgres"))
-    p2 = temp_storage.save_profile(ProfileCreate(name="second-db", username="postgres"))
+    temp_storage.save_profile(ProfileCreate(name="second-db", username="postgres"))
 
     # Deactivate all profiles manually
     with temp_storage._get_connection() as conn:
@@ -216,7 +209,9 @@ def test_get_active_profile_fallback_to_first_when_none_active(temp_storage: Pro
     assert active.name == "first-db"
 
 
-def test_get_active_profile_fallback_to_database_url(temp_storage: ProfileStorage, monkeypatch: pytest.MonkeyPatch):
+def test_get_active_profile_fallback_to_database_url(
+    temp_storage: ProfileStorage, monkeypatch: pytest.MonkeyPatch
+):
     assert temp_storage.get_active_profile() is None
     monkeypatch.setenv(
         "DATABASE_URL",
@@ -233,7 +228,9 @@ def test_get_active_profile_fallback_to_database_url(temp_storage: ProfileStorag
     assert profile.sslmode == "require"
 
 
-def test_get_active_profile_fallback_to_pghost_vars(temp_storage: ProfileStorage, monkeypatch: pytest.MonkeyPatch):
+def test_get_active_profile_fallback_to_pghost_vars(
+    temp_storage: ProfileStorage, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("PGHOST", "postgres.internal")
     monkeypatch.setenv("PGPORT", "5434")
@@ -252,9 +249,24 @@ def test_get_active_profile_fallback_to_pghost_vars(temp_storage: ProfileStorage
 
 
 def test_search_profiles(temp_storage: ProfileStorage):
-    temp_storage.save_profile(ProfileCreate(name="analytics-prod", host="prod.db.internal", database="warehouse", username="pguser"))
-    temp_storage.save_profile(ProfileCreate(name="analytics-staging", host="stage.db.internal", database="warehouse_stg", username="pguser"))
-    temp_storage.save_profile(ProfileCreate(name="billing-db", host="payments.internal", database="invoices", username="pguser"))
+    temp_storage.save_profile(
+        ProfileCreate(
+            name="analytics-prod", host="prod.db.internal", database="warehouse", username="pguser"
+        )
+    )
+    temp_storage.save_profile(
+        ProfileCreate(
+            name="analytics-staging",
+            host="stage.db.internal",
+            database="warehouse_stg",
+            username="pguser",
+        )
+    )
+    temp_storage.save_profile(
+        ProfileCreate(
+            name="billing-db", host="payments.internal", database="invoices", username="pguser"
+        )
+    )
 
     # Partial name match
     results = temp_storage.search_profiles("analytics")
@@ -276,5 +288,3 @@ def test_search_profiles(temp_storage: ProfileStorage):
 
     # No match
     assert temp_storage.search_profiles("nonexistent_cluster") == []
-
-

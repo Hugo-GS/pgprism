@@ -1,9 +1,9 @@
 """Dependency imports must remain compatible without deprecation workarounds."""
 
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 
 def test_testclient_import_has_no_deprecation_warnings():
@@ -11,7 +11,12 @@ def test_testclient_import_has_no_deprecation_warnings():
     package_paths = [str(Path(path or ".").resolve()) for path in sys.path]
     result = subprocess.run(
         [
-            sys.executable, "-I", "-S", "-B", "-W", "error::DeprecationWarning",
+            sys.executable,
+            "-I",
+            "-S",
+            "-B",
+            "-W",
+            "error::DeprecationWarning",
             "-c",
             "import json, sys; sys.path[:0] = json.loads(sys.argv[1]); "
             "from starlette.testclient import TestClient",

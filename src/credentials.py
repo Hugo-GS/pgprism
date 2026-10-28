@@ -1,6 +1,6 @@
 """OS-backed credential storage. Never fall back to file or null keyrings."""
 
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import keyring
 from keyring.backend import KeyringBackend
@@ -21,7 +21,7 @@ class OSCredentialStore:
     """Use one native OS keyring for this store's lifetime, without fallback."""
 
     SERVICE = "pgprism"
-    _OS_MODULES = {
+    _OS_MODULES: ClassVar[set[str]] = {
         "keyring.backends.SecretService",
         "keyring.backends.kwallet",
         "keyring.backends.macOS",
