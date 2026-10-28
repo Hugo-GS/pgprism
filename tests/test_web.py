@@ -52,6 +52,17 @@ def test_static_assets_serve(test_client: TestClient):
     assert "loadProfiles" in js_res.text
     assert "switchTab" in js_res.text
     assert "copySnippet" in js_res.text
+    assert "openSettingsModal" in js_res.text
+    assert "closeSettingsModal" in js_res.text
+
+
+def test_index_page_contains_settings_modal(test_client: TestClient):
+    response = test_client.get("/")
+    assert response.status_code == 200
+    assert 'id="settingsModal"' in response.text
+    assert 'id="settingsProfileForm"' in response.text
+    assert 'Connection Settings' in response.text
+    assert 'Danger Zone' in response.text
 
 
 

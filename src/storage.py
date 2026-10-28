@@ -87,6 +87,27 @@ class ProfileCreate(BaseModel):
         return str(v).strip()
 
 
+class ProfileUpdate(BaseModel):
+    """Partial update payload — only provided fields are changed."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    host: Optional[str] = None
+    port: Optional[int] = Field(default=None, ge=1, le=65535)
+    database: Optional[str] = None
+    username: Optional[str] = Field(default=None, min_length=1)
+    password: Optional[str] = Field(default=None, repr=False)
+    sslmode: Optional[str] = None
+    statement_timeout_ms: Optional[int] = Field(default=None, ge=1000, le=300000)
+
+    @field_validator("database", mode="before")
+    @classmethod
+    def normalize_database(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        stripped = str(v).strip()
+        return "postgres" if not stripped else stripped
+
+
 class Profile(ProfileCreate):
     id: int
     is_active: bool = False
@@ -376,6 +397,53 @@ class ProfileStorage:
             raise
         self._discard_secret(existing["credential_id"])
         return Profile(**profile.model_dump(), id=profile_id, is_active=bool(existing["is_active"]), created_at=existing["created_at"], updated_at=now)
+
+    def partial_update_profile(self, profile_id: int, patch: "ProfileUpdate") -> Optional[Profile]:
+        """Apply only the fields present in *patch*, leaving the rest untouched."""
+        now = datetime.now(timezone.utc).isoformat()
+        new_reference = None
+        try:
+            with self._get_connection() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                existing = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+                if existing is None:
+                    return None
+
+                changes = patch.model_dump(exclude_unset=True)
+
+                # Password handling: None means "don't touch", explicit value replaces.
+                old_reference = existing["credential_id"]
+                if "password" in changes:
+                    new_password = changes.pop("password")
+                    new_reference = self._store_password(new_password) if new_password else None
+                    credential_id = new_reference
+                else:
+                    credential_id = old_reference
+
+                if changes:
+                    set_clause = ", ".join(f"{col} = ?" for col in changes)
+                    values = list(changes.values())
+                    conn.execute(
+                        f"UPDATE profiles SET {set_clause}, credential_id = ?, updated_at = ? WHERE id = ?",
+                        (*values, credential_id, now, profile_id),
+                    )
+                elif credential_id != old_reference:
+                    conn.execute(
+                        "UPDATE profiles SET credential_id = ?, updated_at = ? WHERE id = ?",
+                        (credential_id, now, profile_id),
+                    )
+                else:
+                    return self._row_to_profile(existing)
+
+                conn.commit()
+        except Exception:
+            self._discard_secret(new_reference)
+            raise
+
+        if "password" in patch.model_dump(exclude_unset=True):
+            self._discard_secret(old_reference)
+
+        return self.get_profile(profile_id)
 
     def set_active_profile(self, profile_id: int) -> Optional[Profile]:
         with self._get_connection() as conn:
