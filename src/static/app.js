@@ -285,7 +285,7 @@ function switchTab(targetTab) {
 }
 
 function switchClientConfig(clientKey, tabBtn) {
-    const clients = ['claude', 'cursor', 'antigravity', 'vscode', 'cli'];
+    const clients = ['claude', 'cursor', 'antigravity', 'vscode', 'pi', 'cli'];
     document.querySelectorAll('.client-tabs .fc-tab').forEach(tab => {
         tab.setAttribute('aria-selected', tab === tabBtn ? 'true' : 'false');
     });
@@ -388,6 +388,20 @@ function renderConfigSnippets() {
     };
     const elVscode = document.getElementById('snippet-vscode');
     if (elVscode) elVscode.textContent = JSON.stringify(vscodeJson, null, 2);
+
+    const piJson = {
+        mcpServers: {
+            pgprism: {
+                command: py,
+                args: ["-m", "src.server"],
+                cwd: cwd,
+                exposure: "direct",
+                description: "Read-only PostgreSQL inspection and queries"
+            }
+        }
+    };
+    const elPi = document.getElementById('snippet-pi');
+    if (elPi) elPi.textContent = JSON.stringify(piJson, null, 2);
 
     const elCli = document.getElementById('snippet-cli');
     if (elCli) {

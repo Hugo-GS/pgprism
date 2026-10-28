@@ -140,6 +140,23 @@ Configure the command:
 }
 ```
 
+### Pi
+Add to `~/.pi/agent/mcp.json` (or `.pi/mcp.json` inside a trusted project):
+```json
+{
+  "mcpServers": {
+    "pgprism": {
+      "command": "/path/to/pgprism/.venv/bin/python3",
+      "args": ["-m", "src.server"],
+      "cwd": "/path/to/pgprism",
+      "exposure": "direct",
+      "description": "Read-only PostgreSQL inspection and queries"
+    }
+  }
+}
+```
+Or run `pi mcp add pgprism --cwd /path/to/pgprism -- /path/to/pgprism/.venv/bin/python3 -m src.server`, then `pi mcp list` to verify and `/reload` in a running session. Pi names tools `mcp__pgprism__<tool>`. Its default `codemode` exposure keeps tools out of the model's tool list, so this config uses `direct`.
+
 ---
 
 ## Security Notes
