@@ -191,6 +191,7 @@
                                 <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-cursor" onclick="switchClientConfig('cursor', this)">Cursor</button>
                                 <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-antigravity" onclick="switchClientConfig('antigravity', this)">Antigravity</button>
                                 <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-vscode" onclick="switchClientConfig('vscode', this)">VS Code / Cline</button>
+                                <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-pi" onclick="switchClientConfig('pi', this)">Pi</button>
                                 <button class="fc-tab" type="button" role="tab" aria-selected="false" aria-controls="config-cli" onclick="switchClientConfig('cli', this)">Direct CLI</button>
                             </div>
 
@@ -252,6 +253,22 @@
                                     </button>
                                 </div>
                                 <pre class="fc-code code-box"><code id="snippet-vscode">...</code></pre>
+                            </div>
+
+                            <!-- Pi Config -->
+                            <div id="config-pi" class="fc-panel-body config-pane" role="tabpanel" hidden>
+                                <div class="pane-header">
+                                    <div>
+                                        <h3 class="fc-section-title">Pi</h3>
+                                        <div class="config-target-path">~/.pi/agent/mcp.json (or .pi/mcp.json in a trusted project)</div>
+                                    </div>
+                                    <button class="fc-btn" type="button" onclick="copySnippet('snippet-pi', this)">
+                                        <svg class="fc-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        Copy JSON
+                                    </button>
+                                </div>
+                                <pre class="fc-code code-box"><code id="snippet-pi">...</code></pre>
+                                <div class="section-caption">Or run <code>pi mcp add pgprism --cwd &lt;project&gt; -- &lt;python&gt; -m src.server</code>, then <code>pi mcp list</code> to verify. Tools appear as <code>mcp__pgprism__&lt;tool&gt;</code>; the default <code>codemode</code> exposure hides them from the model, so <code>direct</code> is set here. Run <code>/reload</code> after editing the file.</div>
                             </div>
 
                             <!-- Direct CLI Config -->
