@@ -1,17 +1,19 @@
 """SQL AST query safety validator for PostgreSQL read-only MCP server."""
 
 import re
-from typing import Set, Tuple, Type
+
 import sqlglot
 from sqlglot import exp
+from sqlglot.expressions.core import Expression
 
 
 class SecurityError(Exception):
     """Raised when a SQL query violates read-only safety rules."""
+
     pass
 
 
-FORBIDDEN_AST_NODES: Tuple[Type[exp.Expression], ...] = (
+FORBIDDEN_AST_NODES: tuple[type[Expression], ...] = (
     exp.Insert,
     exp.Update,
     exp.Delete,
@@ -32,13 +34,13 @@ FORBIDDEN_AST_NODES: Tuple[Type[exp.Expression], ...] = (
     exp.Lock,
 )
 
-ALLOWED_ROOT_NODES: Tuple[Type[exp.Expression], ...] = (
+ALLOWED_ROOT_NODES: tuple[type[Expression], ...] = (
     exp.Select,
     exp.Describe,
     exp.Values,
 )
 
-FORBIDDEN_FUNCTIONS: Set[str] = {
+FORBIDDEN_FUNCTIONS: set[str] = {
     "set_config",
     "pg_terminate_backend",
     "pg_cancel_backend",
@@ -85,11 +87,9 @@ def _validate_explain_command(command_expr: exp.Command) -> None:
         r"GENERIC_PLAN|WAL|MEMORY|FORMAT\s+(?:TEXT|XML|JSON|YAML))\b\s*)*"
     )
     match = re.match(options_pattern, text, re.IGNORECASE)
-    inner_sql = text[match.end():].strip() if match else ""
+    inner_sql = text[match.end() :].strip() if match else ""
     if not inner_sql:
-        raise SecurityError(
-            f"EXPLAIN must be followed by a valid query statement, got: '{text}'"
-        )
+        raise SecurityError(f"EXPLAIN must be followed by a valid query statement, got: '{text}'")
     validate_readonly_query(inner_sql)
 
 
@@ -128,15 +128,14 @@ def validate_readonly_query(sql: str) -> str:
     if not isinstance(root, ALLOWED_ROOT_NODES):
         statement_type = root.key.upper() if hasattr(root, "key") else type(root).__name__
         raise SecurityError(
-            f"Statement type '{statement_type}' is not permitted. Only SELECT, EXPLAIN, and SHOW queries are allowed."
+            f"Statement type '{statement_type}' is not permitted. "
+            "Only SELECT, EXPLAIN, and SHOW queries are allowed."
         )
 
     for node in root.walk():
         if isinstance(node, FORBIDDEN_AST_NODES):
             node_name = node.key.upper() if hasattr(node, "key") else type(node).__name__
-            raise SecurityError(
-                f"Forbidden mutating operation '{node_name}' detected in query."
-            )
+            raise SecurityError(f"Forbidden mutating operation '{node_name}' detected in query.")
 
         if isinstance(node, exp.Command):
             raise SecurityError("Forbidden embedded command detected in query.")

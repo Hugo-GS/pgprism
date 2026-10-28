@@ -1,13 +1,16 @@
 """OS keyring policy and sanitized error behavior."""
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
+from keyring.backend import KeyringBackend
 
 
 def test_rejects_non_os_backends():
     from src.credentials import CredentialStoreError, OSCredentialStore
+
     for module, name in [
         ("keyring.backends.null", "Keyring"),
         ("keyring.backends.fail", "Keyring"),
@@ -15,14 +18,17 @@ def test_rejects_non_os_backends():
         ("keyrings.alt.file", "EncryptedKeyring"),
         ("custom.backend", "Keyring"),
     ]:
-        backend = type(name, (), {"__module__": module})()
+        # A bare fake that only mimics a backend's module path.
+        backend = cast(KeyringBackend, type(name, (), {"__module__": module})())
         with pytest.raises(CredentialStoreError, match="OS credential store"):
             OSCredentialStore._select_backend(backend)
 
 
 def test_chainer_selects_os_backend_without_plaintext_fallback(monkeypatch):
     from keyring.backends.chainer import ChainerBackend
+
     from src.credentials import CredentialStoreError, OSCredentialStore
+
     unsafe = SimpleNamespace()
     secure = type("Keyring", (), {"__module__": "keyring.backends.SecretService"})()
     monkeypatch.setattr(ChainerBackend, "backends", [unsafe, secure])
@@ -34,6 +40,7 @@ def test_chainer_selects_os_backend_without_plaintext_fallback(monkeypatch):
 
 def test_password_write_errors_never_include_secret(monkeypatch):
     from src.credentials import CredentialStoreError, OSCredentialStore
+
     store = OSCredentialStore()
     backend = Mock()
     backend.set_password.side_effect = RuntimeError("sensitive-secret-in-backend-error")
@@ -46,6 +53,7 @@ def test_password_write_errors_never_include_secret(monkeypatch):
 
 def test_silent_backend_write_is_rejected(monkeypatch):
     from src.credentials import CredentialStoreError, OSCredentialStore
+
     backend = Mock()
     backend.get_password.return_value = None
     store = OSCredentialStore()

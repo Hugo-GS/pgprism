@@ -3,8 +3,9 @@
 import hashlib
 import threading
 from collections import OrderedDict
-from contextlib import ExitStack, contextmanager
-from typing import Any, Iterable, Iterator, Optional
+from collections.abc import Iterable, Iterator
+from contextlib import ExitStack, contextmanager, suppress
+from typing import Any, ClassVar
 
 import psycopg
 from psycopg_pool import ConnectionPool, PoolClosed
@@ -20,19 +21,17 @@ APPLICATION_NAME = "pgprism"
 def _close_quietly(pools: Iterable[ConnectionPool]) -> None:
     """Closes pools, ignoring errors. Must be called outside the cache lock."""
     for pool in pools:
-        try:
+        with suppress(Exception):
             pool.close()
-        except Exception:
-            pass
 
 
 class PoolManager:
     """Manages connection pools with read-only enforcement and caching."""
 
     _lock = threading.Lock()
-    _cache: "OrderedDict[str, ConnectionPool]" = OrderedDict()
+    _cache: ClassVar[OrderedDict[str, ConnectionPool]] = OrderedDict()
 
-    def __init__(self, profile: Profile, database: Optional[str] = None) -> None:
+    def __init__(self, profile: Profile, database: str | None = None) -> None:
         self.profile = profile
         self.current_database = database or profile.database or "postgres"
 
@@ -42,7 +41,7 @@ class PoolManager:
             raise ValueError("Database name cannot be empty.")
         self.current_database = database.strip()
 
-    def get_conninfo(self, db_override: Optional[str] = None) -> str:
+    def get_conninfo(self, db_override: str | None = None) -> str:
         """Constructs a PostgreSQL libpq connection string."""
         target_db = db_override or self.current_database
         parts = [
@@ -69,7 +68,10 @@ class PoolManager:
     def _connect_kwargs(self) -> dict[str, Any]:
         """Connection parameters shared by pooled and unpooled connections."""
         return {
-            "options": f"-c default_transaction_read_only=on -c statement_timeout={self.profile.statement_timeout_ms}",
+            "options": (
+                "-c default_transaction_read_only=on "
+                f"-c statement_timeout={self.profile.statement_timeout_ms}"
+            ),
             "connect_timeout": 5,
             "application_name": APPLICATION_NAME,
         }
@@ -96,6 +98,7 @@ class PoolManager:
                 open=True,
                 timeout=10.0,
                 kwargs=self._connect_kwargs(),
+                connection_class=psycopg.Connection,
             )
             self._cache[key] = pool
 
@@ -138,13 +141,15 @@ class PoolManager:
         kwargs = self._connect_kwargs()
         kwargs["connect_timeout"] = max(1, int(timeout))
         try:
-            with psycopg.connect(self.get_conninfo(), **kwargs) as conn:
-                with self.read_only_transaction(conn):
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT version();")
-                        row = cur.fetchone()
-                        version = row[0] if row else "Unknown PostgreSQL version"
-                        return True, version
+            with (
+                psycopg.connect(self.get_conninfo(), **kwargs) as conn,
+                self.read_only_transaction(conn),
+                conn.cursor() as cur,
+            ):
+                cur.execute("SELECT version();")
+                row = cur.fetchone()
+                version = row[0] if row else "Unknown PostgreSQL version"
+                return True, version
         except Exception as e:
             return False, str(e)
 

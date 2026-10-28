@@ -1,5 +1,6 @@
 import pytest
-from src.security import validate_readonly_query, SecurityError
+
+from src.security import SecurityError, validate_readonly_query
 
 
 def test_valid_select():
@@ -9,7 +10,10 @@ def test_valid_select():
 
 
 def test_valid_cte_select():
-    sql = "WITH active_users AS (SELECT id, name FROM users WHERE active = true) SELECT * FROM active_users"
+    sql = (
+        "WITH active_users AS (SELECT id, name FROM users WHERE active = true) "
+        "SELECT * FROM active_users"
+    )
     validated = validate_readonly_query(sql)
     assert "active_users" in validated
 
@@ -80,7 +84,10 @@ def test_rejects_dangerous_functions():
 
 
 def test_rejects_merge():
-    sql = "MERGE INTO users USING source ON users.id = source.id WHEN MATCHED THEN UPDATE SET name = source.name"
+    sql = (
+        "MERGE INTO users USING source ON users.id = source.id "
+        "WHEN MATCHED THEN UPDATE SET name = source.name"
+    )
     with pytest.raises(SecurityError):
         validate_readonly_query(sql)
 
@@ -151,4 +158,3 @@ def test_rejects_explain_with_nested_mutation(sql: str):
 def test_rejects_expanded_dangerous_functions(sql: str):
     with pytest.raises(SecurityError, match="Forbidden function"):
         validate_readonly_query(sql)
-

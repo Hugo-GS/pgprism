@@ -1,12 +1,17 @@
 """FastMCP server exposing strictly read-only PostgreSQL tools."""
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 import json
 import os
-from mcp_types import ToolAnnotations
-from mcp.server.mcpserver import MCPServer
+from pathlib import Path
+from typing import Any
+
 from mcp.server.apps import Apps
+from mcp.server.mcpserver import MCPServer
+from mcp_types import ToolAnnotations
+
+from src.database import DatabaseManager, close_all_pools
+from src.security import SecurityError
+from src.storage import ProfileStorage
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -16,13 +21,10 @@ READONLY_ANNOTATIONS = ToolAnnotations(
     idempotent_hint=True,
     open_world_hint=False,
 )
-from src.database import DatabaseManager, close_all_pools
-from src.security import SecurityError
-from src.storage import ProfileStorage
 
 
-def _format_plan_node(node: Dict[str, Any], indent: int = 0) -> List[str]:
-    lines: List[str] = []
+def _format_plan_node(node: dict[str, Any], indent: int = 0) -> list[str]:
+    lines: list[str] = []
     prefix = "  " * indent
     if indent > 0:
         prefix = prefix[:-2] + "->  "
@@ -42,7 +44,10 @@ def _format_plan_node(node: Dict[str, Any], indent: int = 0) -> List[str]:
         actual_total = float(node.get("Actual Total Time", 0.0))
         actual_rows = node.get("Actual Rows", 0)
         actual_loops = node.get("Actual Loops", 1)
-        actual_str = f" (actual time={actual_startup:.3f}..{actual_total:.3f} rows={actual_rows} loops={actual_loops})"
+        actual_str = (
+            f" (actual time={actual_startup:.3f}..{actual_total:.3f} "
+            f"rows={actual_rows} loops={actual_loops})"
+        )
     lines.append(f"{prefix}{node_type}{rel_str}{alias_str}  {cost_str}{actual_str}")
     extra_indent = "  " * (indent + 1)
     if "Filter" in node:
@@ -64,7 +69,7 @@ def _format_json_plan_to_text(plan_json: Any) -> str:
     first = plan_json[0]
     if not isinstance(first, dict):
         return json.dumps(plan_json, indent=2)
-    lines: List[str] = []
+    lines: list[str] = []
     if "Plan" in first and isinstance(first["Plan"], dict):
         lines.extend(_format_plan_node(first["Plan"]))
     if "Planning Time" in first:
@@ -75,8 +80,8 @@ def _format_json_plan_to_text(plan_json: Any) -> str:
 
 
 def create_server(
-    storage: Optional[ProfileStorage] = None,
-    enable_ui: Optional[bool] = None,
+    storage: ProfileStorage | None = None,
+    enable_ui: bool | None = None,
 ) -> MCPServer:
     """Creates and configures the MCP server instance."""
     if enable_ui is None:
@@ -84,13 +89,14 @@ def create_server(
 
     store = storage if storage is not None else ProfileStorage()
 
-    active_state: Dict[str, Any] = {"current_db": None, "profile_id": None}
+    active_state: dict[str, Any] = {"current_db": None, "profile_id": None}
 
     def _get_active_db() -> DatabaseManager:
         profile = store.get_active_profile()
         if not profile:
             raise ValueError(
-                "No active database profile configured. Please add and activate a connection profile."
+                "No active database profile configured. "
+                "Please add and activate a connection profile."
             )
         if active_state["profile_id"] != profile.id:
             active_state["profile_id"] = profile.id
@@ -98,20 +104,20 @@ def create_server(
 
         return DatabaseManager(profile, database=active_state["current_db"])
 
-    def read_query(query: str, max_rows: int = 100) -> Dict[str, Any]:
+    def read_query(query: str, max_rows: int = 100) -> dict[str, Any]:
         """Executes a strictly read-only SQL query against the active PostgreSQL database.
-        
+
         Mutating queries (INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, etc.) are blocked.
         """
         try:
             db = _get_active_db()
-            return db.execute_query(query=query, max_rows=max_rows)
+            return dict(db.execute_query(query=query, max_rows=max_rows))
         except (SecurityError, ValueError) as e:
             return {"status": "error", "message": str(e)}
         except Exception as e:
             return {"status": "error", "message": f"Database execution error: {e}"}
 
-    def explain_query(query: str, analyze: bool = False) -> Dict[str, Any]:
+    def explain_query(query: str, analyze: bool = False) -> dict[str, Any]:
         """Explains the execution plan for a read-only SQL query."""
         try:
             db = _get_active_db()
@@ -149,7 +155,9 @@ def create_server(
             uri="ui://postgres/explain-viewer",
             html=explain_html,
             title="PostgreSQL Explain Plan Viewer",
-            description="Interactive execution plan tree viewer with bottleneck analysis and metrics.",
+            description=(
+                "Interactive execution plan tree viewer with bottleneck analysis and metrics."
+            ),
         )
         apps.add_html_resource(
             uri="ui://postgres/data-grid",
@@ -174,7 +182,10 @@ def create_server(
     server = MCPServer(
         name="pgprism",
         version="0.1.0",
-        description="PgPrism: Strictly read-only PostgreSQL MCP server with local SQLite profile configuration",
+        description=(
+            "PgPrism: Strictly read-only PostgreSQL MCP server "
+            "with local SQLite profile configuration"
+        ),
         extensions=extensions,
     )
 
@@ -183,13 +194,16 @@ def create_server(
         server.tool(annotations=READONLY_ANNOTATIONS)(explain_query)
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def get_active_profile() -> Dict[str, Any]:
+    def get_active_profile() -> dict[str, Any]:
         """Returns the currently active PostgreSQL connection profile."""
         profile = store.get_active_profile()
         if not profile:
             return {
                 "status": "error",
-                "message": "No active database profile configured. Add one via the web UI or set DATABASE_URL / PGHOST environment variables.",
+                "message": (
+                    "No active database profile configured. Add one via the web UI "
+                    "or set DATABASE_URL / PGHOST environment variables."
+                ),
             }
 
         current_db = active_state["current_db"] or profile.database or "postgres"
@@ -209,8 +223,8 @@ def create_server(
         }
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def test_connection() -> Dict[str, Any]:
-        """Tests connectivity to the active PostgreSQL database and returns the server version or error."""
+    def test_connection() -> dict[str, Any]:
+        """Tests connectivity to the active PostgreSQL database and returns the server version or error."""  # noqa: E501
         try:
             db = _get_active_db()
             success, message = db.test_connection(timeout=5.0)
@@ -235,13 +249,13 @@ def create_server(
             }
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_databases() -> List[str]:
+    def list_databases() -> list[str]:
         """Lists all accessible non-template databases on the PostgreSQL server."""
         db = _get_active_db()
         return db.list_databases()
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def select_database(database_name: str) -> Dict[str, Any]:
+    def select_database(database_name: str) -> dict[str, Any]:
         """Switches the target database for subsequent queries and schema exploration."""
         _get_active_db()
         cleaned = database_name.strip()
@@ -255,7 +269,7 @@ def create_server(
         }
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_profiles() -> List[Dict[str, Any]]:
+    def list_profiles() -> list[dict[str, Any]]:
         """Lists all stored database connection profiles."""
         profiles = store.list_profiles()
         return [
@@ -274,8 +288,8 @@ def create_server(
         ]
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def search_profiles(query: str) -> List[Dict[str, Any]]:
-        """Searches stored database connection profiles by partial match on name, host, or database."""
+    def search_profiles(query: str) -> list[dict[str, Any]]:
+        """Searches stored database connection profiles by partial match on name, host, or database."""  # noqa: E501
         matches = store.search_profiles(query)
         return [
             {
@@ -293,7 +307,7 @@ def create_server(
         ]
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def switch_profile(profile_name: str) -> Dict[str, Any]:
+    def switch_profile(profile_name: str) -> dict[str, Any]:
         """Switches the active database connection to another existing profile."""
         profile = store.get_profile_by_name(profile_name)
         if not profile:
@@ -310,66 +324,91 @@ def create_server(
         }
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_schemas() -> List[str]:
+    def list_schemas() -> list[str]:
         """Lists all user schemas available in the active database."""
         db = _get_active_db()
         return db.list_schemas()
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_tables(schema: str = "public") -> List[Dict[str, Any]]:
+    def list_tables(schema: str = "public") -> list[dict[str, Any]]:
         """Lists all tables and views present in the specified schema."""
         db = _get_active_db()
-        return db.list_tables(schema=schema)
+        return [dict(table) for table in db.list_tables(schema=schema)]
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def describe_table(table: str, schema: str = "public") -> Dict[str, Any]:
+    def describe_table(table: str, schema: str = "public") -> dict[str, Any]:
         """Inspects table columns, types, primary keys, and nullability."""
         db = _get_active_db()
-        return db.describe_table(table_name=table, schema=schema)
-
+        return dict(db.describe_table(table_name=table, schema=schema))
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_indexes(table: str, schema: str = "public") -> List[Dict[str, Any]]:
+    def list_indexes(table: str, schema: str = "public") -> list[dict[str, Any]]:
         """Lists indexes on a table, including index definitions."""
         db = _get_active_db()
         return db.list_indexes(table_name=table, schema=schema)
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_foreign_keys(table: str, schema: str = "public") -> List[Dict[str, Any]]:
+    def list_foreign_keys(table: str, schema: str = "public") -> list[dict[str, Any]]:
         """Lists foreign key relationships for a table."""
         db = _get_active_db()
         return db.list_foreign_keys(table_name=table, schema=schema)
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def list_constraints(table: str, schema: str = "public") -> List[Dict[str, Any]]:
+    def list_constraints(table: str, schema: str = "public") -> list[dict[str, Any]]:
         """Lists CHECK, UNIQUE, and EXCLUDE constraints on a table."""
         db = _get_active_db()
         return db.list_constraints(table_name=table, schema=schema)
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def table_stats(table: str, schema: str = "public") -> Dict[str, Any]:
+    def table_stats(table: str, schema: str = "public") -> dict[str, Any]:
         """Returns table statistics: row estimates, dead tuples, vacuum info, scan counts."""
         db = _get_active_db()
         return db.table_stats(table_name=table, schema=schema)
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def running_queries() -> List[Dict[str, Any]]:
+    def running_queries() -> list[dict[str, Any]]:
         """Shows currently running queries on the server with duration and wait events."""
         db = _get_active_db()
         return db.running_queries()
 
     @server.tool(annotations=READONLY_ANNOTATIONS)
-    def database_size() -> Dict[str, Any]:
+    def database_size() -> dict[str, Any]:
         """Returns the size of the current database and its largest tables/indexes."""
         db = _get_active_db()
         return db.database_size()
 
-    @server.resource("postgres://profiles", name="profiles", title="Connection Profiles", description="List of stored database connection profiles.", mime_type="application/json")
+    @server.resource(
+        "postgres://profiles",
+        name="profiles",
+        title="Connection Profiles",
+        description="List of stored database connection profiles.",
+        mime_type="application/json",
+    )
     def resource_profiles() -> str:
         profiles = store.list_profiles()
-        return json.dumps([{"id": p.id, "name": p.name, "host": p.host, "port": p.port, "database": p.database, "username": p.username, "sslmode": p.sslmode, "is_active": p.is_active} for p in profiles])
+        return json.dumps(
+            [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "host": p.host,
+                    "port": p.port,
+                    "database": p.database,
+                    "username": p.username,
+                    "sslmode": p.sslmode,
+                    "is_active": p.is_active,
+                }
+                for p in profiles
+            ]
+        )
 
-    @server.resource("postgres://schemas", name="schemas", title="Database Schemas", description="Schemas in the active database.", mime_type="application/json")
+    @server.resource(
+        "postgres://schemas",
+        name="schemas",
+        title="Database Schemas",
+        description="Schemas in the active database.",
+        mime_type="application/json",
+    )
     def resource_schemas() -> str:
         try:
             db = _get_active_db()
@@ -377,7 +416,13 @@ def create_server(
         except ValueError as e:
             return json.dumps({"error": str(e)})
 
-    @server.resource("postgres://schemas/{schema}/tables", name="schema_tables", title="Schema Tables", description="Tables and views in a schema.", mime_type="application/json")
+    @server.resource(
+        "postgres://schemas/{schema}/tables",
+        name="schema_tables",
+        title="Schema Tables",
+        description="Tables and views in a schema.",
+        mime_type="application/json",
+    )
     def resource_schema_tables(schema: str) -> str:
         try:
             db = _get_active_db()
@@ -386,7 +431,13 @@ def create_server(
         except ValueError as e:
             return json.dumps({"error": str(e)})
 
-    @server.resource("postgres://schemas/{schema}/tables/{table}", name="table_description", title="Table Description", description="Column details, types, and primary keys for a table.", mime_type="application/json")
+    @server.resource(
+        "postgres://schemas/{schema}/tables/{table}",
+        name="table_description",
+        title="Table Description",
+        description="Column details, types, and primary keys for a table.",
+        mime_type="application/json",
+    )
     def resource_table_description(schema: str, table: str) -> str:
         try:
             db = _get_active_db()
@@ -395,10 +446,12 @@ def create_server(
         except ValueError as e:
             return json.dumps({"error": str(e)})
 
-
-
-    @server.prompt(name="debug_slow_query", title="Debug Slow Query", description="Guides the agent through analyzing and optimizing a slow SQL query.")
-    def prompt_debug_slow_query(query: str) -> list[dict]:
+    @server.prompt(
+        name="debug_slow_query",
+        title="Debug Slow Query",
+        description="Guides the agent through analyzing and optimizing a slow SQL query.",
+    )
+    def prompt_debug_slow_query(query: str) -> list[dict[str, str]]:
         return [
             {
                 "role": "user",
@@ -409,38 +462,50 @@ def create_server(
                     "1. Run `explain_query` with `analyze=True` to get the actual execution plan.\n"
                     "2. Use `list_indexes` on the tables involved to check existing indexes.\n"
                     "3. Use `table_stats` to check row estimates and dead tuple counts.\n"
-                    "4. Identify bottlenecks (sequential scans, nested loops, high row estimates).\n"
+                    "4. Identify bottlenecks "
+                    "(sequential scans, nested loops, high row estimates).\n"
                     "5. Suggest specific index creation or query rewrites to improve performance."
                 ),
             }
         ]
 
-    @server.prompt(name="explore_table", title="Explore Table", description="Guides the agent through a comprehensive table exploration for debugging.")
-    def prompt_explore_table(table: str, schema: str = "public") -> list[dict]:
+    @server.prompt(
+        name="explore_table",
+        title="Explore Table",
+        description="Guides the agent through a comprehensive table exploration for debugging.",
+    )
+    def prompt_explore_table(table: str, schema: str = "public") -> list[dict[str, str]]:
         return [
             {
                 "role": "user",
                 "content": (
-                    f"I need to understand the table `{schema}.{table}` for debugging. Please:\n\n"
+                    f"I need to understand the table `{schema}.{table}` for debugging. Please:\n\n"  # noqa: S608
                     "1. Run `describe_table` to show columns, types, and primary keys.\n"
                     "2. Run `list_indexes` to show existing indexes.\n"
                     "3. Run `list_foreign_keys` to show relationships with other tables.\n"
                     "4. Run `table_stats` to show row estimates, dead tuples, and vacuum info.\n"
-                    "5. Run `read_query` with `SELECT * FROM {schema}.{table} LIMIT 5` to show sample data.\n"
+                    "5. Run `read_query` with `SELECT * FROM {schema}.{table} LIMIT 5` "
+                    "to show sample data.\n"
                     "6. Summarize the table structure, relationships, and any potential issues."
                 ),
             }
         ]
 
-    @server.prompt(name="find_data_issues", title="Find Data Quality Issues", description="Guides the agent through checking a table for common data quality problems.")
-    def prompt_find_data_issues(table: str, schema: str = "public") -> list[dict]:
+    @server.prompt(
+        name="find_data_issues",
+        title="Find Data Quality Issues",
+        description="Guides the agent through checking a table for common data quality problems.",
+    )
+    def prompt_find_data_issues(table: str, schema: str = "public") -> list[dict[str, str]]:
         return [
             {
                 "role": "user",
                 "content": (
-                    f"Please check `{schema}.{table}` for data quality issues:\n\n"
+                    f"Please check `{schema}.{table}` for data quality issues:\n\n"  # noqa: S608
                     "1. Run `describe_table` to understand the schema.\n"
-                    "2. For each nullable column, count NULLs: `SELECT column_name, COUNT(*) FILTER (WHERE column_name IS NULL) FROM table`.\n"
+                    "2. For each nullable column, count NULLs: "
+                    "`SELECT column_name, COUNT(*) FILTER (WHERE column_name IS NULL) "
+                    "FROM table`.\n"
                     "3. Check for duplicate rows on primary/unique key columns.\n"
                     "4. Run `list_foreign_keys` and check for orphaned foreign key references.\n"
                     "5. Check for empty strings in text columns that might should be NULL.\n"

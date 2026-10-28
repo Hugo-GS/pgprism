@@ -1,14 +1,10 @@
 """Operational diagnostics and monitoring queries."""
 
-from typing import Dict, List
-
 from src.database.pool import PoolManager
 from src.database.types import JsonValue
 
 
-def table_stats(
-    pool: PoolManager, table_name: str, schema: str = "public"
-) -> Dict[str, JsonValue]:
+def table_stats(pool: PoolManager, table_name: str, schema: str = "public") -> dict[str, JsonValue]:
     """Returns table statistics from pg_stat_user_tables."""
     sql_text = """
         SELECT
@@ -19,26 +15,25 @@ def table_stats(
         FROM pg_stat_user_tables
         WHERE schemaname = %s AND relname = %s
     """
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql_text, (schema, table_name))
-            row = cur.fetchone()
-            if not row:
-                return {"error": f"No stats found for {schema}.{table_name}"}
-            return {
-                "live_rows": row[0],
-                "dead_rows": row[1],
-                "modifications_since_analyze": row[2],
-                "last_vacuum": row[3].isoformat() if row[3] else None,
-                "last_autovacuum": row[4].isoformat() if row[4] else None,
-                "last_analyze": row[5].isoformat() if row[5] else None,
-                "last_autoanalyze": row[6].isoformat() if row[6] else None,
-                "sequential_scans": row[7],
-                "index_scans": row[8],
-            }
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(sql_text, (schema, table_name))
+        row = cur.fetchone()
+        if not row:
+            return {"error": f"No stats found for {schema}.{table_name}"}
+        return {
+            "live_rows": row[0],
+            "dead_rows": row[1],
+            "modifications_since_analyze": row[2],
+            "last_vacuum": row[3].isoformat() if row[3] else None,
+            "last_autovacuum": row[4].isoformat() if row[4] else None,
+            "last_analyze": row[5].isoformat() if row[5] else None,
+            "last_autoanalyze": row[6].isoformat() if row[6] else None,
+            "sequential_scans": row[7],
+            "index_scans": row[8],
+        }
 
 
-def running_queries(pool: PoolManager) -> List[Dict[str, JsonValue]]:
+def running_queries(pool: PoolManager) -> list[dict[str, JsonValue]]:
     """Returns currently running queries from pg_stat_activity."""
     sql_text = """
         SELECT
@@ -49,25 +44,24 @@ def running_queries(pool: PoolManager) -> List[Dict[str, JsonValue]]:
         WHERE state IS NOT NULL AND pid != pg_backend_pid()
         ORDER BY query_start ASC NULLS LAST
     """
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql_text)
-            return [
-                {
-                    "pid": r[0],
-                    "username": str(r[1]) if r[1] else None,
-                    "database": str(r[2]) if r[2] else None,
-                    "state": str(r[3]) if r[3] else None,
-                    "query": str(r[4]) if r[4] else None,
-                    "duration": str(r[5]) if r[5] else None,
-                    "wait_event_type": str(r[6]) if r[6] else None,
-                    "wait_event": str(r[7]) if r[7] else None,
-                }
-                for r in cur.fetchall()
-            ]
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(sql_text)
+        return [
+            {
+                "pid": r[0],
+                "username": str(r[1]) if r[1] else None,
+                "database": str(r[2]) if r[2] else None,
+                "state": str(r[3]) if r[3] else None,
+                "query": str(r[4]) if r[4] else None,
+                "duration": str(r[5]) if r[5] else None,
+                "wait_event_type": str(r[6]) if r[6] else None,
+                "wait_event": str(r[7]) if r[7] else None,
+            }
+            for r in cur.fetchall()
+        ]
 
 
-def database_size(pool: PoolManager) -> Dict[str, JsonValue]:
+def database_size(pool: PoolManager) -> dict[str, JsonValue]:
     """Returns the size of the current database and its largest tables."""
     db_size_sql = """
         SELECT
@@ -87,12 +81,11 @@ def database_size(pool: PoolManager) -> Dict[str, JsonValue]:
         ORDER BY pg_total_relation_size(relid) DESC
         LIMIT 20
     """
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(db_size_sql)
-            db_row = cur.fetchone()
-            cur.execute(tables_sql)
-            table_rows = cur.fetchall()
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(db_size_sql)
+        db_row = cur.fetchone()
+        cur.execute(tables_sql)
+        table_rows = cur.fetchall()
 
     return {
         "database": pool.current_database,

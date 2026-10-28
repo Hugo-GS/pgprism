@@ -1,17 +1,19 @@
 import os
-from pathlib import Path
 import subprocess
 import sys
+from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
+
 from src.storage import ProfileStorage
 from src.web import create_app
 
 
 @pytest.fixture
-def test_client(tmp_path: Path) -> TestClient:
+def test_client(tmp_path: Path) -> Iterator[TestClient]:
     db_path = tmp_path / "web_profiles.db"
     storage = ProfileStorage(db_path=db_path)
     app = create_app(storage=storage)
@@ -61,9 +63,8 @@ def test_index_page_contains_settings_modal(test_client: TestClient):
     assert response.status_code == 200
     assert 'id="settingsModal"' in response.text
     assert 'id="settingsProfileForm"' in response.text
-    assert 'Connection Settings' in response.text
-    assert 'Danger Zone' in response.text
-
+    assert "Connection Settings" in response.text
+    assert "Danger Zone" in response.text
 
 
 def test_create_and_list_profiles_api(test_client: TestClient):
@@ -95,7 +96,7 @@ def test_create_and_list_profiles_api(test_client: TestClient):
 
 def test_activate_profile_api(test_client: TestClient):
     # Create two profiles
-    p1 = test_client.post(
+    test_client.post(
         "/api/profiles",
         json={"name": "p1", "database": "db1", "username": "u1"},
     ).json()
@@ -137,15 +138,18 @@ def test_create_profile_without_database_defaults_to_postgres(test_client: TestC
 
 def test_create_profile_with_custom_timeout(test_client: TestClient):
     """Test that profiles can be created with a custom statement timeout."""
-    response = test_client.post("/api/profiles", json={
-        "name": "timeout-test",
-        "host": "localhost",
-        "port": 5432,
-        "database": "testdb",
-        "username": "user",
-        "password": "pass",
-        "statement_timeout_ms": 60000,
-    })
+    response = test_client.post(
+        "/api/profiles",
+        json={
+            "name": "timeout-test",
+            "host": "localhost",
+            "port": 5432,
+            "database": "testdb",
+            "username": "user",
+            "password": "pass",
+            "statement_timeout_ms": 60000,
+        },
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["statement_timeout_ms"] == 60000
@@ -165,13 +169,16 @@ def test_get_info_endpoint(test_client: TestClient):
 
 def test_get_info_with_active_profile(test_client: TestClient):
     """Test that /api/info returns active profile information when configured."""
-    test_client.post("/api/profiles", json={
-        "name": "prod-read",
-        "host": "db.internal",
-        "port": 5432,
-        "database": "analytics",
-        "username": "readonly_user",
-    })
+    test_client.post(
+        "/api/profiles",
+        json={
+            "name": "prod-read",
+            "host": "db.internal",
+            "port": 5432,
+            "database": "analytics",
+            "username": "readonly_user",
+        },
+    )
     response = test_client.get("/api/info")
     assert response.status_code == 200
     data = response.json()
@@ -181,12 +188,19 @@ def test_get_info_with_active_profile(test_client: TestClient):
 
 def test_search_profiles_api(test_client: TestClient):
     """Test searching profiles via /api/profiles?q=..."""
-    test_client.post("/api/profiles", json={
-        "name": "finance-dw", "host": "fin.internal", "database": "ledger", "username": "pg"
-    })
-    test_client.post("/api/profiles", json={
-        "name": "marketing-dw", "host": "mkt.internal", "database": "leads", "username": "pg"
-    })
+    test_client.post(
+        "/api/profiles",
+        json={"name": "finance-dw", "host": "fin.internal", "database": "ledger", "username": "pg"},
+    )
+    test_client.post(
+        "/api/profiles",
+        json={
+            "name": "marketing-dw",
+            "host": "mkt.internal",
+            "database": "leads",
+            "username": "pg",
+        },
+    )
 
     # Search by q=dw
     res = test_client.get("/api/profiles?q=dw")
@@ -227,17 +241,13 @@ def test_ui_data_grid_endpoint(test_client: TestClient):
     assert "postMessage" in response.text
 
 
-
-
-
-
-
 def test_import_does_not_initialize_profile_storage(tmp_path: Path):
     db_path = tmp_path / "import.db"
     script = """
 from unittest.mock import patch
 
-with patch("src.storage.ProfileStorage", side_effect=AssertionError("storage opened during import")) as constructor, \
+storage_error = AssertionError("storage opened during import")
+with patch("src.storage.ProfileStorage", side_effect=storage_error) as constructor, \
      patch("sqlite3.connect", side_effect=AssertionError("SQLite opened during import")), \
      patch("keyring.get_keyring", side_effect=AssertionError("keyring accessed during import")):
     import src.web
@@ -260,8 +270,12 @@ with patch("src.storage.ProfileStorage", side_effect=AssertionError("storage ope
 
 def test_lifespan_closes_pools_on_shutdown(tmp_path: Path):
     db_path = tmp_path / "lifespan.db"
-    with patch("src.web.ProfileStorage", side_effect=lambda: ProfileStorage(db_path=db_path)) as constructor, \
-         patch("src.web.close_all_pools") as mock_close:
+    with (
+        patch(
+            "src.web.ProfileStorage", side_effect=lambda: ProfileStorage(db_path=db_path)
+        ) as constructor,
+        patch("src.web.close_all_pools") as mock_close,
+    ):
         app = create_app()
         constructor.assert_not_called()
         assert not db_path.exists()
@@ -279,12 +293,16 @@ def test_lifespan_closes_pools_on_shutdown(tmp_path: Path):
 
 def test_lifespan_uses_injected_storage_without_constructing_another(tmp_path: Path):
     storage = ProfileStorage(db_path=tmp_path / "injected.db")
-    with patch("src.web.ProfileStorage", side_effect=AssertionError("unexpected default storage")) as constructor:
+    with patch(
+        "src.web.ProfileStorage", side_effect=AssertionError("unexpected default storage")
+    ) as constructor:
         app = create_app(storage=storage)
         constructor.assert_not_called()
         with TestClient(app) as client:
             created = client.post("/api/profiles", json={"name": "injected", "username": "reader"})
             assert created.status_code == 201
             assert client.get("/api/profiles").json() == [created.json()]
-            assert storage.get_active_profile().name == "injected"
+            active = storage.get_active_profile()
+            assert active is not None
+            assert active.name == "injected"
         constructor.assert_not_called()

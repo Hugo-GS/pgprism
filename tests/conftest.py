@@ -2,7 +2,6 @@
 
 import pytest
 
-
 _environment = pytest.MonkeyPatch()
 
 
@@ -10,8 +9,17 @@ def pytest_configure(config):
     sandbox = config.cache.mkdir("credential-tests")
     _environment.setenv("PGPRISM_DB_PATH", str(sandbox / "import-only.db"))
     _environment.setenv("PYTHON_KEYRING_BACKEND", "keyring.backends.fail.Keyring")
-    for name in ("DATABASE_URL", "POSTGRES_URL", "PGHOST", "PGPORT", "PGDATABASE",
-                 "PGUSER", "PGPASSWORD", "PGSSLMODE", "MCP_POSTGRES_DB_PATH"):
+    for name in (
+        "DATABASE_URL",
+        "POSTGRES_URL",
+        "PGHOST",
+        "PGPORT",
+        "PGDATABASE",
+        "PGUSER",
+        "PGPASSWORD",
+        "PGSSLMODE",
+        "MCP_POSTGRES_DB_PATH",
+    ):
         _environment.delenv(name, raising=False)
 
 
@@ -41,4 +49,5 @@ def memory_keyring():
 @pytest.fixture(autouse=True)
 def isolated_keychain(monkeypatch, memory_keyring):
     from src.credentials import OSCredentialStore
+
     monkeypatch.setattr(OSCredentialStore, "_get_backend", lambda self: memory_keyring)

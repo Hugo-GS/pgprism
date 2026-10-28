@@ -1,6 +1,10 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
+from psycopg_pool import PoolClosed
+
 from src.database import DatabaseManager
+from src.database.pool import MAX_POOLS, PoolManager
 from src.security import SecurityError
 from src.storage import Profile
 
@@ -155,9 +159,7 @@ def test_explain_query(sample_profile: Profile):
     db = DatabaseManager(sample_profile)
 
     mock_cursor = MagicMock()
-    mock_cursor.fetchall.return_value = [
-        ("Seq Scan on users  (cost=0.00..1.02 rows=2 width=36)",)
-    ]
+    mock_cursor.fetchall.return_value = [("Seq Scan on users  (cost=0.00..1.02 rows=2 width=36)",)]
 
     mock_conn = MagicMock()
     mock_conn.__enter__.return_value = mock_conn
@@ -174,7 +176,10 @@ def test_explain_query(sample_profile: Profile):
 def test_explain_query_json_raw_string(sample_profile: Profile):
     db = DatabaseManager(sample_profile)
 
-    json_str = '[{"Plan": {"Node Type": "Seq Scan", "Relation Name": "users", "Startup Cost": 0.0, "Total Cost": 1.02, "Plan Rows": 2, "Plan Width": 36}}]'
+    json_str = (
+        '[{"Plan": {"Node Type": "Seq Scan", "Relation Name": "users", '
+        '"Startup Cost": 0.0, "Total Cost": 1.02, "Plan Rows": 2, "Plan Width": 36}}]'
+    )
     mock_cursor = MagicMock()
     mock_cursor.fetchall.return_value = [(json_str,)]
 
@@ -187,7 +192,9 @@ def test_explain_query_json_raw_string(sample_profile: Profile):
     mock_pool.connection.return_value = mock_conn
     with patch.object(db._pool, "get_pool", return_value=mock_pool):
         plan = db.explain_query("SELECT * FROM users", analyze=True, as_json=True)
-        mock_cursor.execute.assert_called_with("EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS) SELECT * FROM users")
+        mock_cursor.execute.assert_called_with(
+            "EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS) SELECT * FROM users"
+        )
         assert isinstance(plan, list)
         assert len(plan) == 1
         assert plan[0]["Plan"]["Node Type"] == "Seq Scan"
@@ -197,7 +204,9 @@ def test_explain_query_json_raw_string(sample_profile: Profile):
 def test_explain_query_json_preparsed_object(sample_profile: Profile):
     db = DatabaseManager(sample_profile)
 
-    parsed_obj = [{"Plan": {"Node Type": "Index Scan", "Relation Name": "users", "Total Cost": 0.5}}]
+    parsed_obj = [
+        {"Plan": {"Node Type": "Index Scan", "Relation Name": "users", "Total Cost": 0.5}}
+    ]
     mock_cursor = MagicMock()
     mock_cursor.fetchall.return_value = [(parsed_obj,)]
 
@@ -210,7 +219,9 @@ def test_explain_query_json_preparsed_object(sample_profile: Profile):
     mock_pool.connection.return_value = mock_conn
     with patch.object(db._pool, "get_pool", return_value=mock_pool):
         plan = db.explain_query("SELECT * FROM users WHERE id = 1", analyze=False, as_json=True)
-        mock_cursor.execute.assert_called_with("EXPLAIN (FORMAT JSON) SELECT * FROM users WHERE id = 1")
+        mock_cursor.execute.assert_called_with(
+            "EXPLAIN (FORMAT JSON) SELECT * FROM users WHERE id = 1"
+        )
         assert plan == parsed_obj
 
 
@@ -244,11 +255,6 @@ def test_set_database(sample_profile: Profile):
         db.set_database("")
 
 
-from psycopg_pool import PoolClosed
-
-from src.database.pool import MAX_POOLS, PoolManager
-
-
 @pytest.fixture
 def clean_pool_cache():
     PoolManager._cache.clear()
@@ -259,8 +265,16 @@ def clean_pool_cache():
 @pytest.fixture
 def mock_connection_pool():
     # A fresh MagicMock per ConnectionPool(...) call so pools are distinguishable.
-    with patch("src.database.pool.ConnectionPool", side_effect=lambda *a, **k: MagicMock()) as mock_cp:
+    with patch(
+        "src.database.pool.ConnectionPool", side_effect=lambda *a, **k: MagicMock()
+    ) as mock_cp:
         yield mock_cp
+
+
+def _mock_pool(manager: PoolManager, database: str) -> MagicMock:
+    pool = manager.get_pool(database)
+    assert isinstance(pool, MagicMock)
+    return pool
 
 
 def test_pool_key(sample_profile: Profile):
@@ -287,7 +301,9 @@ def test_get_pool_instantiates_connection_pool(sample_profile: Profile, clean_po
         assert kwargs["kwargs"]["application_name"] == "pgprism"
 
 
-def test_get_pool_reuses_cached_pool(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+def test_get_pool_reuses_cached_pool(
+    sample_profile: Profile, clean_pool_cache, mock_connection_pool
+):
     manager = PoolManager(sample_profile)
     first = manager.get_pool("db1")
     second = manager.get_pool("db1")
@@ -295,18 +311,22 @@ def test_get_pool_reuses_cached_pool(sample_profile: Profile, clean_pool_cache, 
     assert mock_connection_pool.call_count == 1
 
 
-def test_get_pool_lru_evicts_and_closes_oldest(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+def test_get_pool_lru_evicts_and_closes_oldest(
+    sample_profile: Profile, clean_pool_cache, mock_connection_pool
+):
     manager = PoolManager(sample_profile)
-    pools = [manager.get_pool(f"db{i}") for i in range(MAX_POOLS + 1)]
+    pools = [_mock_pool(manager, f"db{i}") for i in range(MAX_POOLS + 1)]
     assert len(PoolManager._cache) == MAX_POOLS
     pools[0].close.assert_called_once()
     for pool in pools[1:]:
         pool.close.assert_not_called()
 
 
-def test_get_pool_lru_touch_protects_recent(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+def test_get_pool_lru_touch_protects_recent(
+    sample_profile: Profile, clean_pool_cache, mock_connection_pool
+):
     manager = PoolManager(sample_profile)
-    pools = [manager.get_pool(f"db{i}") for i in range(MAX_POOLS)]
+    pools = [_mock_pool(manager, f"db{i}") for i in range(MAX_POOLS)]
     # Touch the oldest so db1 becomes the least recently used.
     assert manager.get_pool("db0") is pools[0]
     manager.get_pool("db_new")
@@ -314,8 +334,10 @@ def test_get_pool_lru_touch_protects_recent(sample_profile: Profile, clean_pool_
     pools[1].close.assert_called_once()
 
 
-def test_get_pool_credential_change_closes_stale_pool(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
-    old_pool = PoolManager(sample_profile).get_pool("db1")
+def test_get_pool_credential_change_closes_stale_pool(
+    sample_profile: Profile, clean_pool_cache, mock_connection_pool
+):
+    old_pool = _mock_pool(PoolManager(sample_profile), "db1")
     changed = sample_profile.model_copy(update={"password": "rotated"})
     new_pool = PoolManager(changed).get_pool("db1")
     assert new_pool is not old_pool
@@ -323,9 +345,11 @@ def test_get_pool_credential_change_closes_stale_pool(sample_profile: Profile, c
     assert len(PoolManager._cache) == 1
 
 
-def test_close_all_closes_every_pool_and_clears_cache(sample_profile: Profile, clean_pool_cache, mock_connection_pool):
+def test_close_all_closes_every_pool_and_clears_cache(
+    sample_profile: Profile, clean_pool_cache, mock_connection_pool
+):
     manager = PoolManager(sample_profile)
-    pools = [manager.get_pool("db1"), manager.get_pool("db2")]
+    pools = [_mock_pool(manager, "db1"), _mock_pool(manager, "db2")]
     PoolManager.close_all()
     for pool in pools:
         pool.close.assert_called_once()
@@ -339,9 +363,11 @@ def test_connect_retries_once_on_pool_closed(sample_profile: Profile):
     fresh_conn = MagicMock()
     fresh_pool = MagicMock()
     fresh_pool.connection.return_value.__enter__.return_value = fresh_conn
-    with patch.object(manager, "get_pool", side_effect=[closed_pool, fresh_pool]) as mock_get_pool:
-        with manager.connect() as conn:
-            assert conn is fresh_conn
+    with (
+        patch.object(manager, "get_pool", side_effect=[closed_pool, fresh_pool]) as mock_get_pool,
+        manager.connect() as conn,
+    ):
+        assert conn is fresh_conn
     assert mock_get_pool.call_count == 2
     fresh_conn.transaction.assert_called_once()
 
@@ -352,8 +378,10 @@ def test_test_connection_uses_unpooled_connection(sample_profile: Profile, clean
     mock_conn.__enter__.return_value = mock_conn
     mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
     mock_cursor.fetchone.return_value = ("PostgreSQL 16.0",)
-    with patch("src.database.pool.psycopg.connect", return_value=mock_conn) as mock_connect, \
-            patch("src.database.pool.ConnectionPool") as mock_cp:
+    with (
+        patch("src.database.pool.psycopg.connect", return_value=mock_conn) as mock_connect,
+        patch("src.database.pool.ConnectionPool") as mock_cp,
+    ):
         ok, version = manager.test_connection(timeout=3.0)
     assert ok is True
     assert version == "PostgreSQL 16.0"
@@ -366,6 +394,7 @@ def test_test_connection_uses_unpooled_connection(sample_profile: Profile, clean
 
 def test_serialize_value_handles_nan_and_infinity():
     from decimal import Decimal
+
     from src.database import _serialize_value
 
     assert _serialize_value(Decimal("NaN")) is None

@@ -46,13 +46,21 @@ def test_secret_lifecycle_and_reopen(tmp_path: Path):
     secrets = MemorySecrets()
     path = tmp_path / "profiles.db"
     storage = ProfileStorage(path, credential_store=secrets)
-    saved = storage.save_profile(ProfileCreate(name="dev", username="reader", password="first-secret"))
+    saved = storage.save_profile(
+        ProfileCreate(name="dev", username="reader", password="first-secret")
+    )
     assert list(secrets.passwords.values()) == ["first-secret"]
     reopened = ProfileStorage(path, credential_store=secrets)
-    assert reopened.get_active_profile().password == "first-secret"
-    reopened.update_profile(saved.id, ProfileCreate(name="renamed", username="reader", password="second-secret"))
+    active = reopened.get_active_profile()
+    assert active is not None
+    assert active.password == "first-secret"
+    reopened.update_profile(
+        saved.id, ProfileCreate(name="renamed", username="reader", password="second-secret")
+    )
     assert reopened.search_profiles("renamed")[0].password == "second-secret"
-    assert reopened.get_profile_by_name("renamed").password == "second-secret"
+    renamed = reopened.get_profile_by_name("renamed")
+    assert renamed is not None
+    assert renamed.password == "second-secret"
     assert list(secrets.passwords.values()) == ["second-secret"]
     assert b"first-secret" not in path.read_bytes()
     assert b"second-secret" not in path.read_bytes()
@@ -65,7 +73,9 @@ def test_unavailable_store_rejects_save_without_changes(tmp_path: Path):
     storage = ProfileStorage(tmp_path / "profiles.db", credential_store=secrets)
     secrets.fail = True
     with pytest.raises(CredentialStoreError):
-        storage.save_profile(ProfileCreate(name="rejected", username="reader", password="never-persist"))
+        storage.save_profile(
+            ProfileCreate(name="rejected", username="reader", password="never-persist")
+        )
     secrets.fail = False
     assert storage.list_profiles() == []
     assert secrets.passwords == {}
@@ -77,11 +87,15 @@ def test_unavailable_store_rejects_save_without_changes(tmp_path: Path):
 def test_failed_update_and_delete_preserve_profile(tmp_path: Path):
     secrets = MemorySecrets()
     storage = ProfileStorage(tmp_path / "profiles.db", credential_store=secrets)
-    saved = storage.save_profile(ProfileCreate(name="original", username="reader", password="original-secret"))
+    saved = storage.save_profile(
+        ProfileCreate(name="original", username="reader", password="original-secret")
+    )
     snapshot = dict(secrets.passwords)
     secrets.fail = True
     with pytest.raises(CredentialStoreError):
-        storage.update_profile(saved.id, ProfileCreate(name="changed", username="other", password="new"))
+        storage.update_profile(
+            saved.id, ProfileCreate(name="changed", username="other", password="new")
+        )
     secrets.fail = False
     secrets.fail_delete = True
     with pytest.raises(CredentialStoreError, match="Credential deletion failed"):
@@ -105,7 +119,9 @@ def test_password_can_be_cleared_without_losing_profile(tmp_path: Path):
     storage = ProfileStorage(tmp_path / "profiles.db", credential_store=secrets)
     saved = storage.save_profile(ProfileCreate(name="dev", username="reader", password="secret"))
     storage.update_profile(saved.id, ProfileCreate(name="dev", username="reader"))
-    assert storage.get_profile(saved.id).password == ""
+    cleared = storage.get_profile(saved.id)
+    assert cleared is not None
+    assert cleared.password == ""
     assert secrets.passwords == {}
 
 
@@ -121,7 +137,9 @@ def test_duplicate_name_rolls_back_metadata_and_new_secret(tmp_path: Path):
     other = storage.save_profile(ProfileCreate(name="other", username="reader", password="other"))
     snapshot = dict(secrets.passwords)
     with pytest.raises(sqlite3.IntegrityError):
-        storage.update_profile(other.id, ProfileCreate(name="dev", username="changed", password="rejected-update"))
+        storage.update_profile(
+            other.id, ProfileCreate(name="dev", username="changed", password="rejected-update")
+        )
     assert storage.get_profile(other.id) == other
     assert secrets.passwords == snapshot
     assert other.id == saved.id + 1
@@ -133,8 +151,12 @@ def test_distinct_databases_do_not_collide(tmp_path: Path):
     b = ProfileStorage(tmp_path / "b.db", credential_store=secrets)
     pa = a.save_profile(ProfileCreate(name="same", username="same", password="a-password"))
     pb = b.save_profile(ProfileCreate(name="same", username="same", password="b-password"))
-    assert a.get_profile(pa.id).password == "a-password"
-    assert b.get_profile(pb.id).password == "b-password"
+    stored_a = a.get_profile(pa.id)
+    stored_b = b.get_profile(pb.id)
+    assert stored_a is not None
+    assert stored_b is not None
+    assert stored_a.password == "a-password"
+    assert stored_b.password == "b-password"
     assert len(secrets.passwords) == 2
 
 
@@ -157,6 +179,7 @@ def test_legacy_password_migrates_without_changing_profile(tmp_path: Path):
     secrets = MemorySecrets()
     storage = ProfileStorage(path, credential_store=secrets)
     profile = storage.get_active_profile()
+    assert profile is not None
     assert profile.id == 1
     assert profile.name == "legacy"
     assert profile.password == "legacy-secret-marker"
@@ -176,5 +199,7 @@ def test_failed_migration_on_first_secret_write_preserves_original_password(tmp_
     with pytest.raises(CredentialStoreError):
         ProfileStorage(path, credential_store=secrets)
     secrets.fail = False
-    assert ProfileStorage(path, credential_store=secrets).get_profile(1).password == "legacy-secret-marker"
+    migrated = ProfileStorage(path, credential_store=secrets).get_profile(1)
+    assert migrated is not None
+    assert migrated.password == "legacy-secret-marker"
     assert list(secrets.passwords.values()) == ["legacy-secret-marker"]

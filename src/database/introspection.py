@@ -1,7 +1,5 @@
 """Schema and catalog introspection queries."""
 
-from typing import List
-
 from src.database.pool import PoolManager
 from src.database.types import (
     ColumnInfo,
@@ -11,22 +9,17 @@ from src.database.types import (
 )
 
 
-def list_databases(pool: PoolManager) -> List[str]:
+def list_databases(pool: PoolManager) -> list[str]:
     """Lists accessible non-template databases on the PostgreSQL server."""
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT datname FROM pg_database "
-                "WHERE datistemplate = false ORDER BY datname"
-            )
-            return [str(r[0]) for r in cur.fetchall()]
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
+        return [str(r[0]) for r in cur.fetchall()]
 
 
-def list_schemas(pool: PoolManager) -> List[str]:
+def list_schemas(pool: PoolManager) -> list[str]:
     """Lists user-accessible schemas in the database."""
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute("""
                 SELECT schema_name
                 FROM information_schema.schemata
                 WHERE schema_name NOT IN ('pg_catalog', 'information_schema')
@@ -34,29 +27,23 @@ def list_schemas(pool: PoolManager) -> List[str]:
                   AND schema_name NOT LIKE 'pg_toast%%'
                 ORDER BY schema_name
             """)
-            return [str(r[0]) for r in cur.fetchall()]
+        return [str(r[0]) for r in cur.fetchall()]
 
 
-def list_tables(pool: PoolManager, schema: str = "public") -> List[TableInfo]:
+def list_tables(pool: PoolManager, schema: str = "public") -> list[TableInfo]:
     """Lists tables and views in the specified schema."""
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT table_name, table_type "
-                "FROM information_schema.tables "
-                "WHERE table_schema = %s "
-                "ORDER BY table_type, table_name",
-                (schema,),
-            )
-            return [
-                TableInfo(table_name=str(r[0]), table_type=str(r[1]))
-                for r in cur.fetchall()
-            ]
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT table_name, table_type "
+            "FROM information_schema.tables "
+            "WHERE table_schema = %s "
+            "ORDER BY table_type, table_name",
+            (schema,),
+        )
+        return [TableInfo(table_name=str(r[0]), table_type=str(r[1])) for r in cur.fetchall()]
 
 
-def describe_table(
-    pool: PoolManager, table_name: str, schema: str = "public"
-) -> TableDescription:
+def describe_table(pool: PoolManager, table_name: str, schema: str = "public") -> TableDescription:
     """Inspects columns, types, primary keys, and foreign keys of a table."""
     col_sql = """
         SELECT column_name, data_type, is_nullable, column_default
@@ -73,12 +60,11 @@ def describe_table(
         WHERE tc.constraint_type = 'PRIMARY KEY'
           AND tc.table_schema = %s AND tc.table_name = %s
     """
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(col_sql, (schema, table_name))
-            col_rows = cur.fetchall()
-            cur.execute(pk_sql, (schema, table_name))
-            primary_keys = {r[0] for r in cur.fetchall()}
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(col_sql, (schema, table_name))
+        col_rows = cur.fetchall()
+        cur.execute(pk_sql, (schema, table_name))
+        primary_keys = {r[0] for r in cur.fetchall()}
 
     return TableDescription(
         table=table_name,
@@ -100,17 +86,13 @@ def list_indexes(
     pool: PoolManager, table_name: str, schema: str = "public"
 ) -> list[dict[str, JsonValue]]:
     """Lists indexes on a table."""
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT indexname, indexdef FROM pg_indexes "
-                "WHERE schemaname = %s AND tablename = %s ORDER BY indexname",
-                (schema, table_name),
-            )
-            return [
-                {"index_name": str(r[0]), "definition": str(r[1])}
-                for r in cur.fetchall()
-            ]
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT indexname, indexdef FROM pg_indexes "
+            "WHERE schemaname = %s AND tablename = %s ORDER BY indexname",
+            (schema, table_name),
+        )
+        return [{"index_name": str(r[0]), "definition": str(r[1])} for r in cur.fetchall()]
 
 
 def list_foreign_keys(
@@ -135,19 +117,18 @@ def list_foreign_keys(
           AND tc.table_schema = %s AND tc.table_name = %s
         ORDER BY tc.constraint_name
     """
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql_text, (schema, table_name))
-            return [
-                {
-                    "constraint_name": str(r[0]),
-                    "column": str(r[1]),
-                    "foreign_schema": str(r[2]),
-                    "foreign_table": str(r[3]),
-                    "foreign_column": str(r[4]),
-                }
-                for r in cur.fetchall()
-            ]
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(sql_text, (schema, table_name))
+        return [
+            {
+                "constraint_name": str(r[0]),
+                "column": str(r[1]),
+                "foreign_schema": str(r[2]),
+                "foreign_table": str(r[3]),
+                "foreign_column": str(r[4]),
+            }
+            for r in cur.fetchall()
+        ]
 
 
 def list_constraints(
@@ -167,14 +148,13 @@ def list_constraints(
         ORDER BY conname
     """
     type_map = {"c": "CHECK", "u": "UNIQUE", "x": "EXCLUDE"}
-    with pool.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql_text, (schema, table_name))
-            return [
-                {
-                    "constraint_name": str(r[0]),
-                    "type": type_map.get(str(r[1]), str(r[1])),
-                    "definition": str(r[2]),
-                }
-                for r in cur.fetchall()
-            ]
+    with pool.connect() as conn, conn.cursor() as cur:
+        cur.execute(sql_text, (schema, table_name))
+        return [
+            {
+                "constraint_name": str(r[0]),
+                "type": type_map.get(str(r[1]), str(r[1])),
+                "definition": str(r[2]),
+            }
+            for r in cur.fetchall()
+        ]

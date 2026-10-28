@@ -22,14 +22,14 @@ def close_all_pools() -> None:
 
 
 __all__ = [
-    "DatabaseManager",
-    "PoolManager",
-    "close_all_pools",
     "ColumnInfo",
+    "DatabaseManager",
     "JsonPrimitive",
     "JsonValue",
+    "PoolManager",
     "QueryResult",
     "TableDescription",
     "TableInfo",
+    "close_all_pools",
     "serialize_value",
 ]
